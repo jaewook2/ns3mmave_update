@@ -190,6 +190,10 @@ static ns3::GlobalValue
 static ns3::GlobalValue g_e2TermIp ("e2TermIp", "The IP address of the RIC E2 termination",
                                     ns3::StringValue ("192.168.133.13"), ns3::MakeStringChecker ());
 
+static ns3::GlobalValue g_e2Port ("e2Port", "Port number for the RIC E2 termination",
+                                    ns3::StringValue ("32222"), ns3::MakeStringChecker ());
+
+
 static ns3::GlobalValue
     g_enableE2FileLogging ("enableE2FileLogging",
                            "If true, generate offline file logging instead of connecting to RIC",
@@ -238,6 +242,8 @@ main (int argc, char *argv[])
   std::string handoverMode = stringValue.Get ();
   GlobalValue::GetValueByName ("e2TermIp", stringValue);
   std::string e2TermIp = stringValue.Get ();
+  GlobalValue::GetValueByName ("e2Port", uintegerValue);
+  uint16_t e2Port = uintegerValue.Get ();
   GlobalValue::GetValueByName ("enableE2FileLogging", booleanValue);
   bool enableE2FileLogging = booleanValue.Get ();
   GlobalValue::GetValueByName ("numberOfRaPreambles", uintegerValue);
@@ -245,6 +251,7 @@ main (int argc, char *argv[])
 
   NS_LOG_UNCOND ("bufferSize " << bufferSize << " OutageThreshold " << outageThreshold
                                << " HandoverMode " << handoverMode << " e2TermIp " << e2TermIp
+                               << " e2Port " << e2Port 
                                << " enableE2FileLogging " << enableE2FileLogging);
 
   GlobalValue::GetValueByName ("e2lteEnabled", booleanValue);
@@ -306,6 +313,7 @@ main (int argc, char *argv[])
   Config::SetDefault ("ns3::MmWaveHelper::HarqEnabled", BooleanValue (harqEnabled));
   Config::SetDefault ("ns3::MmWaveHelper::UseIdealRrc", BooleanValue (true));
   Config::SetDefault ("ns3::MmWaveHelper::E2TermIp", StringValue (e2TermIp));
+  Config::SetDefault ("ns3::MmWaveHelper::E2Port", UintegerValue (e2Port));
 
   Config::SetDefault ("ns3::MmWaveFlexTtiMacScheduler::HarqEnabled", BooleanValue (harqEnabled));
   Config::SetDefault ("ns3::MmWavePhyMacCommon::NumHarqProcess", UintegerValue (100));
