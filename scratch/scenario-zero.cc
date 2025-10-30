@@ -155,7 +155,7 @@ static ns3::GlobalValue g_e2cuCp ("e2cuCp", "If true, send CU-CP reports", ns3::
                                   ns3::MakeBooleanChecker ());
 
 static ns3::GlobalValue g_reducedPmValues ("reducedPmValues", "If true, use a subset of the the pm containers",
-                                        ns3::BooleanValue (false), ns3::MakeBooleanChecker ());
+                                        ns3::BooleanValue (true), ns3::MakeBooleanChecker ());
 
 static ns3::GlobalValue
     g_hoSinrDifference ("hoSinrDifference",
@@ -191,7 +191,7 @@ static ns3::GlobalValue g_e2TermIp ("e2TermIp", "The IP address of the RIC E2 te
                                     ns3::StringValue ("192.168.133.13"), ns3::MakeStringChecker ());
 
 static ns3::GlobalValue g_e2Port ("e2Port", "Port number for the RIC E2 termination",
-                                    ns3::StringValue ("32222"), ns3::MakeStringChecker ());
+                                    ns3::UintegerValue (32222), ns3::MakeUintegerChecker<uint16_t>() );
 
 
 static ns3::GlobalValue
@@ -209,8 +209,7 @@ main (int argc, char *argv[])
 {
   LogComponentEnableAll (LOG_PREFIX_ALL);
   LogComponentEnable ("E2Termination", LOG_LEVEL_DEBUG);
-  LogComponentEnable ("MmWaveEnbNetDevice", LOG_LEVEL_DEBUG);
-  LogComponentEnable ("LteEnbNetDevice", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("KpmIndication", LOG_LEVEL_DEBUG);
 
   // The maximum X coordinate of the scenario
 

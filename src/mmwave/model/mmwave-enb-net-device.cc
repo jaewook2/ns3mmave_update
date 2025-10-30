@@ -705,7 +705,7 @@ MmWaveEnbNetDevice::BuildRicIndicationHeader (std::string plmId, std::string gnb
     }
 }
 
-Ptr<KpmIndicationMessage>
+Ptr<KpmIndicationPair>
 MmWaveEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
 {
   bool local_m_forceE2FileLogging;
@@ -887,7 +887,13 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
           csv.close ();
         }
       // NS_LOG_UNCOND ("CUUP will be send ");
-      return indicationMessageHelper->CreateIndicationMessage ();
+      // 1030 :  2개의 메시지 생성 
+      Ptr<KpmIndicationPair> msgs = CreateObject<KpmIndicationPair>();
+      msgs->cell =indicationMessageHelper->CreateIndicationMessage("cell");
+      msgs->ue   = indicationMessageHelper->CreateIndicationMessage("ue");
+      return msgs;
+
+      //return indicationMessageHelper->CreateIndicationMessage ();
     }
 }
 
@@ -908,7 +914,7 @@ flip_map (const std::map<A, B> &src)
 }
 
 // IMP - SINR - L3
-Ptr<KpmIndicationMessage>
+Ptr<KpmIndicationPair>
 MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
 {
   Ptr<MmWaveIndicationMessageHelper> indicationMessageHelper =
@@ -1093,7 +1099,12 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
           csv.close ();
         }
       // NS_LOG_UNCOND ("CUCP will be send ");
-      return indicationMessageHelper->CreateIndicationMessage ();
+        // 1030 :  2개의 메시지 생성 
+      Ptr<KpmIndicationPair> msgs = CreateObject<KpmIndicationPair>();
+      msgs->cell =indicationMessageHelper->CreateIndicationMessage("cell");
+      msgs->ue   = indicationMessageHelper->CreateIndicationMessage("ue");
+      return msgs;
+      //return indicationMessageHelper->CreateIndicationMessage ();
     }
 }
 
@@ -1118,7 +1129,7 @@ MmWaveEnbNetDevice::GetRlcBufferOccupancy (Ptr<LteRlc> rlc) const
     }
 }
 
-Ptr<KpmIndicationMessage>
+Ptr<KpmIndicationPair>
 MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrCellId)
 {
   bool local_m_forceE2FileLogging;
@@ -1531,7 +1542,12 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
           csv.close ();
         }
       //NS_LOG_UNCOND ("DU will be send ");
-      return indicationMessageHelper->CreateIndicationMessage ();
+      // 1030 :  2개의 메시지 생성 
+      Ptr<KpmIndicationPair> msgs = CreateObject<KpmIndicationPair>();
+      msgs->cell =indicationMessageHelper->CreateIndicationMessage("cell");
+      msgs->ue   = indicationMessageHelper->CreateIndicationMessage("ue");
+      return msgs;
+      //return indicationMessageHelper->CreateIndicationMessage ();
     }
 }
 
@@ -1549,37 +1565,59 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
     {
       // Create CU-UP
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
-      Ptr<KpmIndicationMessage> cuUpMsg = BuildRicIndicationMessageCuUp (plmId);
-
+      //Ptr<KpmIndicationMessage> cuUpMsg = BuildRicIndicationMessageCuUp (plmId);
+      auto cuUpMsg_pair = BuildRicIndicationMessageCuUp (plmId);
+      auto cuUpCellMsg = cuUpMsg_pair->cell;
+      auto cuUpUeMsg   = cuUpMsg_pair->ue;
       // Send CU-UP only if offline logging is disabled
-      if (header != nullptr && cuUpMsg != nullptr)
+      if (!m_forceE2FileLogging && header != nullptr && cuUpCellMsg != nullptr  && cuUpUeMsg != nullptr)
         {
-          NS_LOG_DEBUG ("Creating NR CU-UP Indication message");
+          NS_LOG_DEBUG ("Creating NR CU-UP UE Indication message");
           E2AP_PDU *pdu_cuup_ue = new E2AP_PDU;
           encoding::generate_e2apv1_indication_request_parameterized (
               pdu_cuup_ue, params.requestorId, params.instanceId, params.ranFuncionId,
               params.actionId,
               1, // TODO sequence number
-              (uint8_t *) header->m_buffer, // buffer containing the encoded header
-              header->m_size, // size of the encoded header
-              (uint8_t *) cuUpMsg->m_buffer, // buffer containing the encoded message
-              cuUpMsg->m_size); // size of the encoded message
+              (uint8_t*)header->m_buffer, // buffer containing the encoded header
+              (int)header->m_size,// size of the encoded header
+              (uint8_t *) cuUpUeMsg->m_buffer, // buffer containing the encoded message
+              (int)cuUpUeMsg->m_size); // size of the encoded message
+          NS_LOG_DEBUG ("Created NR CU-UP UE Indication message");
 
-          NS_LOG_DEBUG ("Created NR CU-UP Indication message");
-              if (header->m_buffer) {
-                  free(header->m_buffer);
-                  header->m_buffer = nullptr;
-                  header->m_size   = 0;
-              }
+          if (cuUpUeMsg->m_buffer) {
+              free(cuUpUeMsg->m_buffer);
+              cuUpUeMsg->m_buffer = nullptr;
+              cuUpUeMsg->m_size   = 0;
+          }
+          NS_LOG_DEBUG ("Sending NR CU-UP UE Indication message");
+          m_e2term->SendE2Message (pdu_cuup_ue);
+          NS_LOG_DEBUG ("Send NR CU-UP UE Indication message");
 
-              if (cuUpMsg->m_buffer) {
-                  free(cuUpMsg->m_buffer);
-                  cuUpMsg->m_buffer = nullptr;
-                  cuUpMsg->m_size   = 0;
-              }
-              NS_LOG_DEBUG ("Sending NR CU-UP Indication message");
-              m_e2term->SendE2Message (pdu_cuup_ue);
-              NS_LOG_DEBUG ("Send NR CU-UP Indication message");
+          E2AP_PDU *pdu_cuup_cell = new E2AP_PDU;
+
+          encoding::generate_e2apv1_indication_request_parameterized (
+              pdu_cuup_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+              params.actionId,
+              1, // TODO sequence number
+              (uint8_t*)header->m_buffer, // buffer containing the encoded header
+              (int)header->m_size,// size of the encoded header
+              (uint8_t *) cuUpCellMsg->m_buffer, // buffer containing the encoded message
+              (int)cuUpCellMsg->m_size); // size of the encoded message
+          NS_LOG_DEBUG ("Created NR CU-UP cell Indication message");
+          if (header->m_buffer) {
+              free(header->m_buffer);
+              header->m_buffer = nullptr;
+              header->m_size   = 0;
+          }
+
+          if (cuUpCellMsg->m_buffer) {
+              free(cuUpCellMsg->m_buffer);
+              cuUpCellMsg->m_buffer = nullptr;
+              cuUpCellMsg->m_size   = 0;
+          }
+          NS_LOG_DEBUG ("Sending NR CU-UP cell Indication message");
+          m_e2term->SendE2Message (pdu_cuup_cell);
+          NS_LOG_DEBUG ("Send NR CU-UP cell Indication message");
 
           //delete pdu_cuup_ue;
 
@@ -1590,52 +1628,81 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
     {
       // Create and send CU-CP
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
-      Ptr<KpmIndicationMessage> cuCpMsg = BuildRicIndicationMessageCuCp (plmId);
+      //Ptr<KpmIndicationMessage> cuCpMsg = BuildRicIndicationMessageCuCp (plmId);
+
+      auto cuCpMsg_pair = BuildRicIndicationMessageCuCp (plmId);
+      auto cuCpCellMsg = cuCpMsg_pair->cell;
+      auto cuCpUeMsg   = cuCpMsg_pair->ue;
 
       // Send CU-CP only if offline logging is disabled
-      if (header != nullptr && cuCpMsg != nullptr)
+      if (!m_forceE2FileLogging && header != nullptr && cuCpCellMsg != nullptr  && cuCpUeMsg != nullptr)
         {
-
-          NS_LOG_DEBUG ("Creating NR CU-CP Indication message");
+          NS_LOG_DEBUG ("Creating NR CU-CP UE Indication message");
           E2AP_PDU *pdu_cucp_ue = new E2AP_PDU;
           encoding::generate_e2apv1_indication_request_parameterized (
               pdu_cucp_ue, params.requestorId, params.instanceId, params.ranFuncionId,
               params.actionId,
               1, // TODO sequence number
-              (uint8_t *) header->m_buffer, // buffer containing the encoded header
-              header->m_size, // size of the encoded header
-              (uint8_t *) cuCpMsg->m_buffer, // buffer containing the encoded message
-              cuCpMsg->m_size); // size of the encoded message
-          NS_LOG_DEBUG ("Created NR CU-CP Indication message");
+              (uint8_t*)header->m_buffer, // buffer containing the encoded header
+              (int)header->m_size,// size of the encoded header
+              (uint8_t *) cuCpUeMsg->m_buffer, // buffer containing the encoded message
+              (int)cuCpUeMsg->m_size); // size of the encoded message
+          NS_LOG_DEBUG ("Created NR CU-CP UE Indication message");
+
+          if (cuCpUeMsg->m_buffer) {
+              free(cuCpUeMsg->m_buffer);
+              cuCpUeMsg->m_buffer = nullptr;
+              cuCpUeMsg->m_size   = 0;
+          }
+          NS_LOG_DEBUG ("Sending NR CU-CP UE Indication message");
+          m_e2term->SendE2Message (pdu_cucp_ue);
+          NS_LOG_DEBUG ("Send NR CU-CP UE Indication message");
+
+          E2AP_PDU *pdu_cucp_cell = new E2AP_PDU;
+
+          encoding::generate_e2apv1_indication_request_parameterized (
+              pdu_cucp_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+              params.actionId,
+              1, // TODO sequence number
+              (uint8_t*)header->m_buffer, // buffer containing the encoded header
+              (int)header->m_size,// size of the encoded header
+              (uint8_t *) cuCpCellMsg->m_buffer, // buffer containing the encoded message
+              (int)cuCpCellMsg->m_size); // size of the encoded message
+          NS_LOG_DEBUG ("Created NR CU-CP cell Indication message");
           if (header->m_buffer) {
               free(header->m_buffer);
               header->m_buffer = nullptr;
               header->m_size   = 0;
           }
 
-          if (cuCpMsg->m_buffer) {
-              free(cuCpMsg->m_buffer);
-              cuCpMsg->m_buffer = nullptr;
-              cuCpMsg->m_size   = 0;
+          if (cuCpCellMsg->m_buffer) {
+              free(cuCpCellMsg->m_buffer);
+              cuCpCellMsg->m_buffer = nullptr;
+              cuCpCellMsg->m_size   = 0;
           }
-          NS_LOG_DEBUG ("Sending NR CU-CP Indication message");
-          m_e2term->SendE2Message (pdu_cucp_ue);
-          NS_LOG_DEBUG ("Send NR CU-CP Indication message");
-          //delete pdu_cucp_ue;
-        }
+          NS_LOG_DEBUG ("Sending NR CU-CP cell Indication message");
+          m_e2term->SendE2Message (pdu_cucp_cell);
+          NS_LOG_DEBUG ("Send NR CU-CP cell Indication message");
+
+         } //delete pdu_cuup_ue;
     }
 
   if (m_sendDu)
     {
       // Create DU
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
-      Ptr<KpmIndicationMessage> duMsg = BuildRicIndicationMessageDu (plmId, m_cellId);
+      //Ptr<KpmIndicationMessage> duMsg = BuildRicIndicationMessageDu (plmId, m_cellId);
+
+      auto duMsg_pair = BuildRicIndicationMessageDu (plmId, m_cellId);
+      auto duCellMsg = duMsg_pair->cell;
+      auto duUeMsg   = duMsg_pair->ue;
+
 
       // Send DU only if offline logging is disabled
-      if (header != nullptr && duMsg != nullptr)
+      if (!m_forceE2FileLogging && header != nullptr && duCellMsg != nullptr  && duUeMsg != nullptr)
         {
 
-          NS_LOG_DEBUG ("Creating NR DU Indication message");
+          NS_LOG_DEBUG ("Creating NR DU UE Indication message");
           E2AP_PDU *pdu_du_ue = new E2AP_PDU;
           encoding::generate_e2apv1_indication_request_parameterized (
               pdu_du_ue, params.requestorId, params.instanceId, params.ranFuncionId,
@@ -1643,25 +1710,47 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
               1, // TODO sequence number
               (uint8_t *) header->m_buffer, // buffer containing the encoded header
               header->m_size, // size of the encoded header
-              (uint8_t *) duMsg->m_buffer, // buffer containing the encoded message
-              duMsg->m_size); // size of the encoded message
-                    NS_LOG_DEBUG ("Created NR DU Indication message");
+              (uint8_t *) duUeMsg->m_buffer, // buffer containing the encoded message
+              duUeMsg->m_size); // size of the encoded message
+                    NS_LOG_DEBUG ("Created NR DU UE Indication message");
 
+
+          if (duUeMsg->m_buffer) {
+              free(duUeMsg->m_buffer);
+              duUeMsg->m_buffer = nullptr;
+              duUeMsg->m_size   = 0;
+          }
+          NS_LOG_DEBUG ("Sending NR DU UE  Indication message");
+          m_e2term->SendE2Message (pdu_du_ue);
+          NS_LOG_DEBUG ("Send NR DU UE Indication message");
+
+
+          
+          NS_LOG_DEBUG ("Creating NR DU cell Indication message");
+          E2AP_PDU *pdu_du_cell = new E2AP_PDU;
+          encoding::generate_e2apv1_indication_request_parameterized (
+              pdu_du_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+              params.actionId,
+              1, // TODO sequence number
+              (uint8_t *) header->m_buffer, // buffer containing the encoded header
+              header->m_size, // size of the encoded header
+              (uint8_t *) duCellMsg->m_buffer, // buffer containing the encoded message
+              duCellMsg->m_size); // size of the encoded message
+                NS_LOG_DEBUG ("Created NR DU cell Indication message");
           if (header->m_buffer) {
               free(header->m_buffer);
               header->m_buffer = nullptr;
               header->m_size   = 0;
           }
 
-          if (duMsg->m_buffer) {
-              free(duMsg->m_buffer);
-              duMsg->m_buffer = nullptr;
-              duMsg->m_size   = 0;
+          if (duCellMsg->m_buffer) {
+              free(duCellMsg->m_buffer);
+              duCellMsg->m_buffer = nullptr;
+              duCellMsg->m_size   = 0;
           }
-          NS_LOG_DEBUG ("Sending NR DU Indication message");
-          m_e2term->SendE2Message (pdu_du_ue);
-          NS_LOG_DEBUG ("Send NR DU Indication message");
-
+          NS_LOG_DEBUG ("Sending NR DU cell  Indication message");
+          m_e2term->SendE2Message (pdu_du_cell);
+          NS_LOG_DEBUG ("Send NR DU cell Indication message");
           //delete pdu_du_ue;
         }
     }

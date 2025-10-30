@@ -36,7 +36,7 @@
 #include "ns3/mmwave-bearer-stats-calculator.h"
 
 namespace ns3 {
-
+    
     class Packet;
 
     class PacketBurst;
@@ -265,10 +265,10 @@ namespace ns3 {
 
         // TODO doxy
         Ptr<KpmIndicationHeader> BuildRicIndicationHeader(std::string plmId, std::string gnbId, uint16_t nrCellId);
-
-        Ptr<KpmIndicationMessage> BuildRicIndicationMessageCuUp(std::string plmId);
-
-        Ptr<KpmIndicationMessage> BuildRicIndicationMessageCuCp(std::string plmId);
+        //update 1029
+        Ptr<KpmIndicationPair> BuildRicIndicationMessageCuUp(std::string plmId);
+        Ptr<KpmIndicationPair> BuildRicIndicationMessageCuCp(std::string plmId);
+        //update 1029
 
         std::string GetImsiString(uint64_t imsi);
 

@@ -789,7 +789,7 @@ LteEnbNetDevice::BuildRicIndicationHeader (std::string plmId, std::string gnbId,
     }
 }
 
-Ptr<KpmIndicationMessage>
+Ptr<KpmIndicationPair>
 LteEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
 {
   bool local_m_forceE2FileLogging;
@@ -977,11 +977,18 @@ LteEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
           csv.close ();
         }
       //
-      return indicationMessageHelper->CreateIndicationMessage ();
+
+      // 1029 :  2개의 메시지 생성 
+      Ptr<KpmIndicationPair> msgs = CreateObject<KpmIndicationPair>();
+      msgs->cell =indicationMessageHelper->CreateIndicationMessage("cell");
+      msgs->ue   = indicationMessageHelper->CreateIndicationMessage("ue");
+      return msgs;
+
+      // return indicationMessageHelper->CreateIndicationMessage ();
     }
 }
 
-Ptr<KpmIndicationMessage>
+Ptr<KpmIndicationPair>
 LteEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
 {
   bool local_m_forceE2FileLogging;
@@ -1096,7 +1103,12 @@ LteEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
 
           csv.close ();
         }
-      return indicationMessageHelper->CreateIndicationMessage ();
+      //return indicationMessageHelper->CreateIndicationMessage ();
+      // updated by 1030
+      Ptr<KpmIndicationPair> msgs = CreateObject<KpmIndicationPair>();
+      msgs->cell =indicationMessageHelper->CreateIndicationMessage("cell");
+      msgs->ue   = indicationMessageHelper->CreateIndicationMessage("ue");
+      return msgs;
     }
 }
 
@@ -1114,12 +1126,14 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
     {
       // Create CU-UP
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
-      Ptr<KpmIndicationMessage> cuUpMsg = BuildRicIndicationMessageCuUp (plmId);
+      auto cuUpMsg_pair = BuildRicIndicationMessageCuUp (plmId);
+      auto cuUpCellMsg = cuUpMsg_pair->cell;
+      auto cuUpUeMsg   = cuUpMsg_pair->ue;
 
       // Send CU-UP only if offline logging is disabled
-      if (!m_forceE2FileLogging && header != nullptr && cuUpMsg != nullptr)
+      if (!m_forceE2FileLogging && header != nullptr && cuUpCellMsg != nullptr  && cuUpUeMsg != nullptr)
         {
-          NS_LOG_DEBUG ("Creating LTE CU-UP Indication message");
+          NS_LOG_DEBUG ("Creating LTE CU-UP UE Indication message");
           E2AP_PDU *pdu_cuup_ue = new E2AP_PDU;
           encoding::generate_e2apv1_indication_request_parameterized (
               pdu_cuup_ue, params.requestorId, params.instanceId, params.ranFuncionId,
@@ -1127,26 +1141,46 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
               1, // TODO sequence number
               (uint8_t*)header->m_buffer, // buffer containing the encoded header
               (int)header->m_size,// size of the encoded header
-              (uint8_t *) cuUpMsg->m_buffer, // buffer containing the encoded message
-              (int)cuUpMsg->m_size); // size of the encoded message
-          NS_LOG_DEBUG ("Created LTE CU-UP Indication message");
+              (uint8_t *) cuUpUeMsg->m_buffer, // buffer containing the encoded message
+              (int)cuUpUeMsg->m_size); // size of the encoded message
+          NS_LOG_DEBUG ("Created LTE CU-UP UE Indication message");
+
+          if (cuUpUeMsg->m_buffer) {
+              free(cuUpUeMsg->m_buffer);
+              cuUpUeMsg->m_buffer = nullptr;
+              cuUpUeMsg->m_size   = 0;
+          }
+          NS_LOG_DEBUG ("Sending LTE CU-UP UE Indication message");
+          m_e2term->SendE2Message (pdu_cuup_ue);
+          NS_LOG_DEBUG ("Send LTE CU-UP UE Indication message");
+
+          E2AP_PDU *pdu_cuup_cell = new E2AP_PDU;
+
+          encoding::generate_e2apv1_indication_request_parameterized (
+              pdu_cuup_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+              params.actionId,
+              1, // TODO sequence number
+              (uint8_t*)header->m_buffer, // buffer containing the encoded header
+              (int)header->m_size,// size of the encoded header
+              (uint8_t *) cuUpCellMsg->m_buffer, // buffer containing the encoded message
+              (int)cuUpCellMsg->m_size); // size of the encoded message
+          NS_LOG_DEBUG ("Created LTE CU-UP cell Indication message");
           if (header->m_buffer) {
               free(header->m_buffer);
               header->m_buffer = nullptr;
               header->m_size   = 0;
           }
 
-          if (cuUpMsg->m_buffer) {
-              free(cuUpMsg->m_buffer);
-              cuUpMsg->m_buffer = nullptr;
-              cuUpMsg->m_size   = 0;
+          if (cuUpCellMsg->m_buffer) {
+              free(cuUpCellMsg->m_buffer);
+              cuUpCellMsg->m_buffer = nullptr;
+              cuUpCellMsg->m_size   = 0;
           }
-          NS_LOG_DEBUG ("Sending LTE CU-UP Indication message");
-          m_e2term->SendE2Message (pdu_cuup_ue);
-          NS_LOG_DEBUG ("Send LTE CU-UP Indication message");
+          NS_LOG_DEBUG ("Sending LTE CU-UP cell Indication message");
+          m_e2term->SendE2Message (pdu_cuup_cell);
+          NS_LOG_DEBUG ("Send LTE CU-UP cell Indication message");
 
           //delete pdu_cuup_ue;
-          //NS_LOG_DEBUG ("Send LTE CU-UP4");
 
         }
     }
@@ -1155,41 +1189,64 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
     {
       // Create CU-CP
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
-      Ptr<KpmIndicationMessage> cuCpMsg = BuildRicIndicationMessageCuCp (plmId);
+      //Ptr<KpmIndicationMessage> cuCpMsg = BuildRicIndicationMessageCuCp (plmId);
+
+      auto cuCpMsg_pair = BuildRicIndicationMessageCuCp (plmId);
+      auto cuCpCellMsg = cuCpMsg_pair->cell;
+      auto cuCpUeMsg   = cuCpMsg_pair->ue;
 
       // Send CU-CP only if offline logging is disabled
-      if (!m_forceE2FileLogging && header != nullptr && cuCpMsg != nullptr)
+      if (!m_forceE2FileLogging && header != nullptr && cuCpCellMsg != nullptr  && cuCpUeMsg != nullptr)
         {
 
-          NS_LOG_DEBUG ("Creating LTE CU-CP Indication message");
+          NS_LOG_DEBUG ("Creating LTE CU-CP UE Indication message");
           E2AP_PDU *pdu_cucp_ue = new E2AP_PDU;
           encoding::generate_e2apv1_indication_request_parameterized (
               pdu_cucp_ue, params.requestorId, params.instanceId, params.ranFuncionId,
               params.actionId,
               1, // TODO sequence number
-              (uint8_t *) header->m_buffer, // buffer containing the encoded header
-              (int)header->m_size, // size of the encoded header
-              (uint8_t *) cuCpMsg->m_buffer, // buffer containing the encoded message
-              (int)cuCpMsg->m_size); // size of the encoded message
+              (uint8_t*)header->m_buffer, // buffer containing the encoded header
+              (int)header->m_size,// size of the encoded header
+              (uint8_t *) cuCpUeMsg->m_buffer, // buffer containing the encoded message
+              (int)cuCpUeMsg->m_size); // size of the encoded message
+          NS_LOG_DEBUG ("Created LTE CU-CP UE Indication message");
 
-          NS_LOG_DEBUG ("Created LTE CU-CP Indication message");
+          if (cuCpUeMsg->m_buffer) {
+              free(cuCpUeMsg->m_buffer);
+              cuCpUeMsg->m_buffer = nullptr;
+              cuCpUeMsg->m_size   = 0;
+          }
+          NS_LOG_DEBUG ("Sending LTE CU-CP UE Indication message");
+          m_e2term->SendE2Message (pdu_cucp_ue);
+          NS_LOG_DEBUG ("Send LTE CU-CP UE Indication message");
+
+          E2AP_PDU *pdu_cucp_cell = new E2AP_PDU;
+
+          encoding::generate_e2apv1_indication_request_parameterized (
+              pdu_cucp_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+              params.actionId,
+              1, // TODO sequence number
+              (uint8_t*)header->m_buffer, // buffer containing the encoded header
+              (int)header->m_size,// size of the encoded header
+              (uint8_t *) cuCpCellMsg->m_buffer, // buffer containing the encoded message
+              (int)cuCpCellMsg->m_size); // size of the encoded message
+          NS_LOG_DEBUG ("Created LTE CU-CP cell Indication message");
           if (header->m_buffer) {
               free(header->m_buffer);
               header->m_buffer = nullptr;
               header->m_size   = 0;
           }
 
-          if (cuCpMsg->m_buffer) {
-              free(cuCpMsg->m_buffer);
-              cuCpMsg->m_buffer = nullptr;
-              cuCpMsg->m_size   = 0;
+          if (cuCpCellMsg->m_buffer) {
+              free(cuCpCellMsg->m_buffer);
+              cuCpCellMsg->m_buffer = nullptr;
+              cuCpCellMsg->m_size   = 0;
           }
-          NS_LOG_DEBUG ("Sending LTE CU-CP Indication message");
-          m_e2term->SendE2Message (pdu_cucp_ue);
-          NS_LOG_DEBUG ("Send LTE CU-CP Indication message");
+          NS_LOG_DEBUG ("Sending LTE CU-CP cell Indication message");
+          m_e2term->SendE2Message (pdu_cucp_cell);
+          NS_LOG_DEBUG ("Send LTE CU-CP cell Indication message");
 
-          //delete pdu_cucp_ue;
-
+          //delete pdu_cuup_ue;
         }
     }
 

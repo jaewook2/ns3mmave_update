@@ -56,6 +56,10 @@
 
 
 namespace ns3 {
+
+
+
+    
 /* Add forward declarations here */
     class Packet;
 
@@ -157,13 +161,13 @@ namespace ns3 {
 
             // TODO doxy
             Ptr<KpmIndicationHeader> BuildRicIndicationHeader(std::string plmId, std::string gnbId, uint16_t nrCellId);
+            //update 1029
+            Ptr<KpmIndicationPair> BuildRicIndicationMessageCuUp(std::string plmId);
 
-            Ptr<KpmIndicationMessage> BuildRicIndicationMessageCuUp(std::string plmId);
+            Ptr<KpmIndicationPair> BuildRicIndicationMessageCuCp(std::string plmId);
 
-            Ptr<KpmIndicationMessage> BuildRicIndicationMessageCuCp(std::string plmId);
-
-            Ptr<KpmIndicationMessage> BuildRicIndicationMessageDu(std::string plmId, uint16_t nrCellId);
-
+            Ptr<KpmIndicationPair> BuildRicIndicationMessageDu(std::string plmId, uint16_t nrCellId);
+           //update 1029
             std::string GetImsiString(uint64_t imsi);
 
             uint32_t GetRlcBufferOccupancy(Ptr<LteRlc> rlc) const;
