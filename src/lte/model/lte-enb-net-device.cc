@@ -334,7 +334,14 @@ LteEnbNetDevice::GetTypeId (void)
               "Format should correspond to the particular use case:\n"
               "TS: Contains multiple lines with ts, imsi, targetCellId\n",
               StringValue (""), MakeStringAccessor (&LteEnbNetDevice::m_controlFilename),
-              MakeStringChecker ());
+              MakeStringChecker ())
+          // Attribute addtion at 251111
+          .AddAttribute ("EnableNBReport", "If true, send AggregatedReport", BooleanValue (false),
+              MakeBooleanAccessor (&LteEnbNetDevice::m_sendNB), MakeBooleanChecker ()) 
+          .AddAttribute ("EnableNBCellReport", "If true, send AggregatedReport", BooleanValue (false),
+              MakeBooleanAccessor (&LteEnbNetDevice::m_sendNB_cell), MakeBooleanChecker ()) 
+          .AddAttribute ("EnableNBUEReport", "If true, send AggregatedReport", BooleanValue (false),
+              MakeBooleanAccessor (&LteEnbNetDevice::m_sendNB_ue), MakeBooleanChecker ()) ;
   return tid;
 }
 
@@ -718,7 +725,9 @@ LteEnbNetDevice::SetE2Termination (Ptr<E2Termination> e2term)
     {
       long m_e2_func_id = long (e2_func_id);
       long m_rc_e2_func_id = long (rc_e2_func_id); 
-      Ptr<KpmFunctionDescription> kpmFd = Create<KpmFunctionDescription> ();
+      // update
+      int nb_type = 0;
+      Ptr<KpmFunctionDescription> kpmFd = Create<KpmFunctionDescription> (nb_type);
       e2term->RegisterKpmCallbackToE2Sm (
           m_e2_func_id, kpmFd,
           std::bind (&LteEnbNetDevice::KpmSubscriptionCallback, this, std::placeholders::_1));
@@ -1112,6 +1121,198 @@ LteEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
     }
 }
 
+// update 1111
+Ptr<KpmIndicationPair>
+LteEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
+{
+    bool local_m_forceE2FileLogging;
+
+  if (m_forceE2FileLogging)
+    {
+      local_m_forceE2FileLogging = true;
+    }
+  else
+    {
+      local_m_forceE2FileLogging = false;
+    }
+  if (m_e2andlog)
+    {
+      local_m_forceE2FileLogging = false;
+    }
+  
+  Ptr<LteIndicationMessageHelper> indicationMessageHelper =
+      Create<LteIndicationMessageHelper> (IndicationMessageHelper::IndicationMessageType::eNB,
+                                          local_m_forceE2FileLogging, m_reducedPmValues);
+  auto ueMap = m_rrc->GetUeMap ();
+  auto ueMapSize = ueMap.size ();
+  // gNB-wide PDCP volume in downlink
+  double cellDlTxVolume = 0;
+  // sum of the per-user average latency
+  double perUserAverageLatencySum = 0;
+
+
+  //std::unordered_map<uint64_t, std::string> uePmString{};
+
+  for (auto ue : ueMap)
+    {
+      uint64_t imsi = ue.second->GetImsi ();
+      std::string ueImsiComplete = GetImsiString (imsi);
+      long numDrb = ue.second->GetDrbMap ().size ();
+      
+      // To Do fixed
+      // CuUp Value
+      long txDlPackets =
+          m_e2PdcpStatsCalculator->GetDlTxPackets (imsi, 3); // LCID 3 is used for data
+      double txBytes =
+          m_e2PdcpStatsCalculator->GetDlTxData (imsi, 3) * 8 / 1e3; // in kbit, not byte
+      cellDlTxVolume += txBytes;
+
+      long txPdcpPduLteRlc = 0;
+      double txPdcpPduBytesLteRlc = 0;
+      auto drbMap = ue.second->GetDrbMap ();
+      for (auto drb : drbMap)
+        {
+          txPdcpPduLteRlc += drb.second->m_rlc->GetTxPacketsInReportingPeriod ();
+          txPdcpPduBytesLteRlc += drb.second->m_rlc->GetTxBytesInReportingPeriod ();
+          drb.second->m_rlc->ResetRlcCounters ();
+        }
+      auto rlcMap = ue.second->GetRlcMap (); // secondary-connected RLCs
+      for (auto drb : rlcMap)
+        {
+          txPdcpPduLteRlc += drb.second->m_rlc->GetTxPacketsInReportingPeriod ();
+          txPdcpPduBytesLteRlc += drb.second->m_rlc->GetTxBytesInReportingPeriod ();
+          drb.second->m_rlc->ResetRlcCounters ();
+        }
+      txPdcpPduBytesLteRlc *= 8 / 1e3;
+
+      long txPdcpPduNrRlc = std::max (long (0), txDlPackets - txPdcpPduLteRlc);
+      double txPdcpPduBytesNrRlc = std::max (0.0, txBytes - txPdcpPduBytesLteRlc);
+
+      double pdcpLatency = m_e2PdcpStatsCalculator->GetDlDelay (imsi, 3) / 1e5; // unit: x 0.1 ms
+      perUserAverageLatencySum += pdcpLatency;
+
+      double pdcpThroughput = txBytes / m_e2Periodicity; // unit kbps
+
+      m_e2PdcpStatsCalculator->ResetResultsForImsiLcid (imsi, 3);
+
+      long drbRelAct = 0;
+
+      NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+              << " " << std::to_string (m_cellId) << " cell, connected UE with IMSI " << imsi
+              << " ueImsiString " << ueImsiComplete << " txDlPackets " << txDlPackets
+              << " txDlPacketsNr " << txPdcpPduNrRlc << " txBytes " << txBytes
+              << " txDlBytesNr " << txPdcpPduBytesNrRlc << " pdcpLatency " << pdcpLatency
+              << " pdcpThroughput " << pdcpThroughput << "numDrb" << numDrb <<"drbRelAct" << drbRelAct);
+
+      // 수정
+      if (!indicationMessageHelper->IsOffline ())
+        {
+          indicationMessageHelper-> AddeNBUePmItem (ueImsiComplete, txBytes,
+                                             txDlPackets, pdcpThroughput,
+                                             pdcpLatency,  numDrb,
+                                             drbRelAct);
+        }
+
+     // uePmString.insert (std::make_pair (imsi, std::to_string (numDrb) + "," + std::to_string (0)));
+    }
+  // Cell 정보
+  double cellAverageLatency = 0;
+  if (!ueMap.empty ())
+  {
+    cellAverageLatency = perUserAverageLatencySum / ueMap.size ();
+  }
+  long pdcpBytesUl = 0 ; // not supported by jlee
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+              << " " << std::to_string (m_cellId) << " cell, connected UEs number "
+              << ueMapSize << " cellAverageLatency " << cellAverageLatency << "pDCPBytesUL " 
+              << pdcpBytesUl << "cellDlTxVolume" << cellDlTxVolume);
+
+  if (!indicationMessageHelper->IsOffline ())
+    {
+      indicationMessageHelper->AddeNBCellPmItem (cellAverageLatency, pdcpBytesUl, cellDlTxVolume, ueMapSize);
+    }
+/*
+  if (m_forceE2FileLogging)
+    {
+      std::ofstream csv{};
+      csv.open (m_cuCpFileName.c_str (), std::ios_base::app);
+      if (!csv.is_open ())
+        {
+          NS_FATAL_ERROR ("Can't open file " << m_cuCpFileName.c_str ());
+        }
+
+      NS_LOG_DEBUG ("m_cuCpFileName open " << m_cuCpFileName);
+
+      // the string is timestamp, ueImsiComplete, numActiveUes, DRB.EstabSucc.5QI.UEID (numDrb), DRB.RelActNbr.5QI.UEID (0)
+
+      uint64_t timestamp = m_startTime + (uint64_t) Simulator::Now ().GetMilliSeconds ();
+
+      for (auto ue : ueMap)
+        {
+          uint64_t imsi = ue.second->GetImsi ();
+          std::string ueImsiComplete = GetImsiString (imsi);
+
+          auto uePms = uePmString.find (imsi)->second;
+
+          std::string to_print = std::to_string (timestamp) + "," + ueImsiComplete + "," +
+                                 std::to_string (ueMapSize) + "," + uePms + ",,,,,,," + "\n";
+
+          NS_LOG_DEBUG (to_print);
+
+          csv << to_print;
+        }
+
+      csv.close ();
+
+      return nullptr;
+    }
+  else
+    {
+      if (m_e2andlog == 1)
+        {
+          std::ofstream csv{};
+          csv.open (m_cuCpFileName.c_str (), std::ios_base::app);
+          if (!csv.is_open ())
+            {
+              NS_FATAL_ERROR ("Can't open file " << m_cuCpFileName.c_str ());
+            }
+
+          NS_LOG_DEBUG ("m_cuCpFileName open " << m_cuCpFileName);
+
+          // the string is timestamp, ueImsiComplete, numActiveUes, DRB.EstabSucc.5QI.UEID (numDrb), DRB.RelActNbr.5QI.UEID (0)
+
+          uint64_t timestamp = m_startTime + (uint64_t) Simulator::Now ().GetMilliSeconds ();
+
+          for (auto ue : ueMap)
+            {
+              uint64_t imsi = ue.second->GetImsi ();
+              std::string ueImsiComplete = GetImsiString (imsi);
+
+              auto uePms = uePmString.find (imsi)->second;
+
+              std::string to_print = std::to_string (timestamp) + "," + ueImsiComplete + "," +
+                                     std::to_string (ueMapSize) + "," + uePms + ",,,,,,," + "\n";
+
+              NS_LOG_DEBUG (to_print);
+
+              csv << to_print;
+            }
+
+          csv.close ();
+        }
+  */
+      //return indicationMessageHelper->CreateIndicationMessage ();
+      // updated by 1030
+      Ptr<KpmIndicationPair> msgs = CreateObject<KpmIndicationPair>();
+      msgs->cell =indicationMessageHelper->CreateIndicationMessage("cell");
+      msgs->ue   = indicationMessageHelper->CreateIndicationMessage("ue");
+      return msgs;
+    }
+
+
+
+
+
 void
 LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionRequest_rval_s params)
 {
@@ -1122,134 +1323,199 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
   NS_LOG_DEBUG ("LteEnbNetDevice " << std::to_string (m_cellId) << " BuildAndSendMessage at time "
                                    << Simulator::Now ().GetSeconds ());
 
-  if (m_sendCuUp)
-    {
-      // Create CU-UP
+  // add if statemen if (m_sendNB) {} at 1111
+  if (m_sendNB)
+  {
+      // Create Aggregated Message
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
-      auto cuUpMsg_pair = BuildRicIndicationMessageCuUp (plmId);
-      auto cuUpCellMsg = cuUpMsg_pair->cell;
-      auto cuUpUeMsg   = cuUpMsg_pair->ue;
+      auto nbMsg_pair = BuildRicIndicationMessageNB (plmId);
+      auto nbCellMsg = nbMsg_pair->cell;
+      auto nbUeMsg   = nbMsg_pair->ue;
 
       // Send CU-UP only if offline logging is disabled
-      if (!m_forceE2FileLogging && header != nullptr && cuUpCellMsg != nullptr  && cuUpUeMsg != nullptr)
+      if (!m_forceE2FileLogging && header != nullptr && nbCellMsg != nullptr  && nbUeMsg != nullptr)
         {
-          NS_LOG_DEBUG ("Creating LTE CU-UP UE Indication message");
-          E2AP_PDU *pdu_cuup_ue = new E2AP_PDU;
-          encoding::generate_e2apv1_indication_request_parameterized (
-              pdu_cuup_ue, params.requestorId, params.instanceId, params.ranFuncionId,
-              params.actionId,
-              1, // TODO sequence number
-              (uint8_t*)header->m_buffer, // buffer containing the encoded header
-              (int)header->m_size,// size of the encoded header
-              (uint8_t *) cuUpUeMsg->m_buffer, // buffer containing the encoded message
-              (int)cuUpUeMsg->m_size); // size of the encoded message
-          NS_LOG_DEBUG ("Created LTE CU-UP UE Indication message");
+          if (m_sendNB_ue) {
+            NS_LOG_DEBUG ("Creating LTE UE Indication message");
 
-          if (cuUpUeMsg->m_buffer) {
-              free(cuUpUeMsg->m_buffer);
-              cuUpUeMsg->m_buffer = nullptr;
-              cuUpUeMsg->m_size   = 0;
+            E2AP_PDU *pdu_nb_ue = new E2AP_PDU;
+            encoding::generate_e2apv1_indication_request_parameterized (
+                pdu_nb_ue, params.requestorId, params.instanceId, params.ranFuncionId,
+                params.actionId,
+                1, // TODO sequence number
+                (uint8_t*)header->m_buffer, // buffer containing the encoded header
+                (int)header->m_size,// size of the encoded header
+                (uint8_t *) nbUeMsg->m_buffer, // buffer containing the encoded message
+                (int)nbUeMsg->m_size); // size of the encoded message
+            NS_LOG_DEBUG ("Created LTE UE Indication message");
+
+            if (nbUeMsg->m_buffer) {
+                free(nbUeMsg->m_buffer);
+                nbUeMsg->m_buffer = nullptr;
+                nbUeMsg->m_size   = 0;
+            }
+            NS_LOG_DEBUG ("Sending LTE UE Indication message");
+            m_e2term->SendE2Message (pdu_nb_ue);
+            NS_LOG_DEBUG ("Send LTE UE Indication message");
+          } 
+          if (m_sendNB_cell) { 
+            E2AP_PDU *pdu_nb_cell = new E2AP_PDU;
+
+            encoding::generate_e2apv1_indication_request_parameterized (
+                pdu_nb_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+                params.actionId,
+                1, // TODO sequence number
+                (uint8_t*)header->m_buffer, // buffer containing the encoded header
+                (int)header->m_size,// size of the encoded header
+                (uint8_t *) nbCellMsg->m_buffer, // buffer containing the encoded message
+                (int)nbCellMsg->m_size); // size of the encoded message
+            NS_LOG_DEBUG ("Created LTE cell Indication message");
+            if (header->m_buffer) {
+                free(header->m_buffer);
+                header->m_buffer = nullptr;
+                header->m_size   = 0;
+            }
+
+            if (nbCellMsg->m_buffer) {
+                free(nbCellMsg->m_buffer);
+                nbCellMsg->m_buffer = nullptr;
+                nbCellMsg->m_size   = 0;
+            }
+            NS_LOG_DEBUG ("Sending LTE cell Indication message");
+            m_e2term->SendE2Message (pdu_nb_cell);
+            NS_LOG_DEBUG ("Send LTE cell Indication message");
           }
-          NS_LOG_DEBUG ("Sending LTE CU-UP UE Indication message");
-          m_e2term->SendE2Message (pdu_cuup_ue);
-          NS_LOG_DEBUG ("Send LTE CU-UP UE Indication message");
-
-          E2AP_PDU *pdu_cuup_cell = new E2AP_PDU;
-
-          encoding::generate_e2apv1_indication_request_parameterized (
-              pdu_cuup_cell, params.requestorId, params.instanceId, params.ranFuncionId,
-              params.actionId,
-              1, // TODO sequence number
-              (uint8_t*)header->m_buffer, // buffer containing the encoded header
-              (int)header->m_size,// size of the encoded header
-              (uint8_t *) cuUpCellMsg->m_buffer, // buffer containing the encoded message
-              (int)cuUpCellMsg->m_size); // size of the encoded message
-          NS_LOG_DEBUG ("Created LTE CU-UP cell Indication message");
-          if (header->m_buffer) {
-              free(header->m_buffer);
-              header->m_buffer = nullptr;
-              header->m_size   = 0;
-          }
-
-          if (cuUpCellMsg->m_buffer) {
-              free(cuUpCellMsg->m_buffer);
-              cuUpCellMsg->m_buffer = nullptr;
-              cuUpCellMsg->m_size   = 0;
-          }
-          NS_LOG_DEBUG ("Sending LTE CU-UP cell Indication message");
-          m_e2term->SendE2Message (pdu_cuup_cell);
-          NS_LOG_DEBUG ("Send LTE CU-UP cell Indication message");
-
-          //delete pdu_cuup_ue;
-
+          // To Do Check
         }
-    }
+   } else {
+    if (m_sendCuUp)
+      {
+        // Create CU-UP
+        Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
+        auto cuUpMsg_pair = BuildRicIndicationMessageCuUp (plmId);
+        auto cuUpCellMsg = cuUpMsg_pair->cell;
+        auto cuUpUeMsg   = cuUpMsg_pair->ue;
 
-  if (m_sendCuCp)
-    {
-      // Create CU-CP
-      Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
-      //Ptr<KpmIndicationMessage> cuCpMsg = BuildRicIndicationMessageCuCp (plmId);
+        // Send CU-UP only if offline logging is disabled
+        if (!m_forceE2FileLogging && header != nullptr && cuUpCellMsg != nullptr  && cuUpUeMsg != nullptr)
+          {
+            NS_LOG_DEBUG ("Creating LTE CU-UP UE Indication message");
+            E2AP_PDU *pdu_cuup_ue = new E2AP_PDU;
+            encoding::generate_e2apv1_indication_request_parameterized (
+                pdu_cuup_ue, params.requestorId, params.instanceId, params.ranFuncionId,
+                params.actionId,
+                1, // TODO sequence number
+                (uint8_t*)header->m_buffer, // buffer containing the encoded header
+                (int)header->m_size,// size of the encoded header
+                (uint8_t *) cuUpUeMsg->m_buffer, // buffer containing the encoded message
+                (int)cuUpUeMsg->m_size); // size of the encoded message
+            NS_LOG_DEBUG ("Created LTE CU-UP UE Indication message");
 
-      auto cuCpMsg_pair = BuildRicIndicationMessageCuCp (plmId);
-      auto cuCpCellMsg = cuCpMsg_pair->cell;
-      auto cuCpUeMsg   = cuCpMsg_pair->ue;
+            if (cuUpUeMsg->m_buffer) {
+                free(cuUpUeMsg->m_buffer);
+                cuUpUeMsg->m_buffer = nullptr;
+                cuUpUeMsg->m_size   = 0;
+            }
+            NS_LOG_DEBUG ("Sending LTE CU-UP UE Indication message");
+            m_e2term->SendE2Message (pdu_cuup_ue);
+            NS_LOG_DEBUG ("Send LTE CU-UP UE Indication message");
 
-      // Send CU-CP only if offline logging is disabled
-      if (!m_forceE2FileLogging && header != nullptr && cuCpCellMsg != nullptr  && cuCpUeMsg != nullptr)
-        {
+            E2AP_PDU *pdu_cuup_cell = new E2AP_PDU;
 
-          NS_LOG_DEBUG ("Creating LTE CU-CP UE Indication message");
-          E2AP_PDU *pdu_cucp_ue = new E2AP_PDU;
-          encoding::generate_e2apv1_indication_request_parameterized (
-              pdu_cucp_ue, params.requestorId, params.instanceId, params.ranFuncionId,
-              params.actionId,
-              1, // TODO sequence number
-              (uint8_t*)header->m_buffer, // buffer containing the encoded header
-              (int)header->m_size,// size of the encoded header
-              (uint8_t *) cuCpUeMsg->m_buffer, // buffer containing the encoded message
-              (int)cuCpUeMsg->m_size); // size of the encoded message
-          NS_LOG_DEBUG ("Created LTE CU-CP UE Indication message");
+            encoding::generate_e2apv1_indication_request_parameterized (
+                pdu_cuup_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+                params.actionId,
+                1, // TODO sequence number
+                (uint8_t*)header->m_buffer, // buffer containing the encoded header
+                (int)header->m_size,// size of the encoded header
+                (uint8_t *) cuUpCellMsg->m_buffer, // buffer containing the encoded message
+                (int)cuUpCellMsg->m_size); // size of the encoded message
+            NS_LOG_DEBUG ("Created LTE CU-UP cell Indication message");
+            if (header->m_buffer) {
+                free(header->m_buffer);
+                header->m_buffer = nullptr;
+                header->m_size   = 0;
+            }
 
-          if (cuCpUeMsg->m_buffer) {
-              free(cuCpUeMsg->m_buffer);
-              cuCpUeMsg->m_buffer = nullptr;
-              cuCpUeMsg->m_size   = 0;
+            if (cuUpCellMsg->m_buffer) {
+                free(cuUpCellMsg->m_buffer);
+                cuUpCellMsg->m_buffer = nullptr;
+                cuUpCellMsg->m_size   = 0;
+            }
+            NS_LOG_DEBUG ("Sending LTE CU-UP cell Indication message");
+            m_e2term->SendE2Message (pdu_cuup_cell);
+            NS_LOG_DEBUG ("Send LTE CU-UP cell Indication message");
+
+            //delete pdu_cuup_ue;
+
           }
-          NS_LOG_DEBUG ("Sending LTE CU-CP UE Indication message");
-          m_e2term->SendE2Message (pdu_cucp_ue);
-          NS_LOG_DEBUG ("Send LTE CU-CP UE Indication message");
+      }
 
-          E2AP_PDU *pdu_cucp_cell = new E2AP_PDU;
+    if (m_sendCuCp)
+      {
+        // Create CU-CP
+        Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
+        //Ptr<KpmIndicationMessage> cuCpMsg = BuildRicIndicationMessageCuCp (plmId);
 
-          encoding::generate_e2apv1_indication_request_parameterized (
-              pdu_cucp_cell, params.requestorId, params.instanceId, params.ranFuncionId,
-              params.actionId,
-              1, // TODO sequence number
-              (uint8_t*)header->m_buffer, // buffer containing the encoded header
-              (int)header->m_size,// size of the encoded header
-              (uint8_t *) cuCpCellMsg->m_buffer, // buffer containing the encoded message
-              (int)cuCpCellMsg->m_size); // size of the encoded message
-          NS_LOG_DEBUG ("Created LTE CU-CP cell Indication message");
-          if (header->m_buffer) {
-              free(header->m_buffer);
-              header->m_buffer = nullptr;
-              header->m_size   = 0;
+        auto cuCpMsg_pair = BuildRicIndicationMessageCuCp (plmId);
+        auto cuCpCellMsg = cuCpMsg_pair->cell;
+        auto cuCpUeMsg   = cuCpMsg_pair->ue;
+
+        // Send CU-CP only if offline logging is disabled
+        if (!m_forceE2FileLogging && header != nullptr && cuCpCellMsg != nullptr  && cuCpUeMsg != nullptr)
+          {
+
+            NS_LOG_DEBUG ("Creating LTE CU-CP UE Indication message");
+            E2AP_PDU *pdu_cucp_ue = new E2AP_PDU;
+            encoding::generate_e2apv1_indication_request_parameterized (
+                pdu_cucp_ue, params.requestorId, params.instanceId, params.ranFuncionId,
+                params.actionId,
+                1, // TODO sequence number
+                (uint8_t*)header->m_buffer, // buffer containing the encoded header
+                (int)header->m_size,// size of the encoded header
+                (uint8_t *) cuCpUeMsg->m_buffer, // buffer containing the encoded message
+                (int)cuCpUeMsg->m_size); // size of the encoded message
+            NS_LOG_DEBUG ("Created LTE CU-CP UE Indication message");
+
+            if (cuCpUeMsg->m_buffer) {
+                free(cuCpUeMsg->m_buffer);
+                cuCpUeMsg->m_buffer = nullptr;
+                cuCpUeMsg->m_size   = 0;
+            }
+            NS_LOG_DEBUG ("Sending LTE CU-CP UE Indication message");
+            m_e2term->SendE2Message (pdu_cucp_ue);
+            NS_LOG_DEBUG ("Send LTE CU-CP UE Indication message");
+
+            E2AP_PDU *pdu_cucp_cell = new E2AP_PDU;
+
+            encoding::generate_e2apv1_indication_request_parameterized (
+                pdu_cucp_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+                params.actionId,
+                1, // TODO sequence number
+                (uint8_t*)header->m_buffer, // buffer containing the encoded header
+                (int)header->m_size,// size of the encoded header
+                (uint8_t *) cuCpCellMsg->m_buffer, // buffer containing the encoded message
+                (int)cuCpCellMsg->m_size); // size of the encoded message
+            NS_LOG_DEBUG ("Created LTE CU-CP cell Indication message");
+            if (header->m_buffer) {
+                free(header->m_buffer);
+                header->m_buffer = nullptr;
+                header->m_size   = 0;
+            }
+
+            if (cuCpCellMsg->m_buffer) {
+                free(cuCpCellMsg->m_buffer);
+                cuCpCellMsg->m_buffer = nullptr;
+                cuCpCellMsg->m_size   = 0;
+            }
+            NS_LOG_DEBUG ("Sending LTE CU-CP cell Indication message");
+            m_e2term->SendE2Message (pdu_cucp_cell);
+            NS_LOG_DEBUG ("Send LTE CU-CP cell Indication message");
+
+            //delete pdu_cuup_ue;
           }
-
-          if (cuCpCellMsg->m_buffer) {
-              free(cuCpCellMsg->m_buffer);
-              cuCpCellMsg->m_buffer = nullptr;
-              cuCpCellMsg->m_size   = 0;
-          }
-          NS_LOG_DEBUG ("Sending LTE CU-CP cell Indication message");
-          m_e2term->SendE2Message (pdu_cucp_cell);
-          NS_LOG_DEBUG ("Send LTE CU-CP cell Indication message");
-
-          //delete pdu_cuup_ue;
-        }
-    }
-
+      }
+  }
   if (m_stopSendingMessages)
     {
       return;
@@ -1264,6 +1530,7 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
         Simulator::Schedule (Seconds (m_e2Periodicity), &LteEnbNetDevice::BuildAndSendReportMessage,
                              this, params);
     }
+ 
 }
 
 void
