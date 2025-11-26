@@ -173,7 +173,14 @@ MmWaveEnbNetDevice::GetTypeId ()
                          MakeDoubleChecker<double> ())
           .AddAttribute ("RC_E2functionID", "Function ID to subscribe", DoubleValue (3),
                          MakeDoubleAccessor (&MmWaveEnbNetDevice::rc_e2_func_id),
-                         MakeDoubleChecker<double> ());
+                         MakeDoubleChecker<double> ())
+        // Attribute addtion at 251111
+          .AddAttribute ("EnablgNBReport", "If true, send AggregatedReport", BooleanValue (false),
+              MakeBooleanAccessor (&MmWaveEnbNetDevice::m_sendNB), MakeBooleanChecker ()) 
+          .AddAttribute ("EnablgNBCellReport", "If true, send AggregatedReport", BooleanValue (false),
+              MakeBooleanAccessor (&MmWaveEnbNetDevice::m_sendNB_cell), MakeBooleanChecker ()) 
+          .AddAttribute ("EnablgNBUEReport", "If true, send AggregatedReport", BooleanValue (false),
+              MakeBooleanAccessor (&MmWaveEnbNetDevice::m_sendNB_ue), MakeBooleanChecker ()) ;
   return tid;
 }
 
@@ -642,7 +649,9 @@ MmWaveEnbNetDevice::SetE2Termination (Ptr<E2Termination> e2term)
     {
       long m_e2_func_id = long (e2_func_id);
       long m_rc_e2_func_id = long (rc_e2_func_id);
-      Ptr<KpmFunctionDescription> kpmFd = Create<KpmFunctionDescription> ();
+      // update
+      int nb_type = 1;
+      Ptr<KpmFunctionDescription> kpmFd = Create<KpmFunctionDescription> (nb_type);
       e2term->RegisterKpmCallbackToE2Sm (
           m_e2_func_id, kpmFd,
           std::bind (&MmWaveEnbNetDevice::KpmSubscriptionCallback, this, std::placeholders::_1));
@@ -990,7 +999,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
         {
           nNeighbours = m_l3sinrMap[imsi].size () - 1;
         }
-      int itIndex = 0;
+        int itIndex = 0;
       // Save only the first E2SM_REPORT_MAX_NEIGH SINR for each UE which represent the best values among all the SINRs detected by all the cells
       for (std::map<long double, uint16_t>::iterator it = --sortFlipMap.end ();
            it != --sortFlipMap.begin () && itIndex < nNeighbours; it--)
@@ -1000,6 +1009,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
             {
               sinr = 10 * std::log10 (it->first); // now SINR is a key due to the sort of the map
               convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinr);
+
               if (!indicationMessageHelper->IsOffline ())
                 {
                   // l3RrcMeasurementNeigh->AddNeighbourCellMeasurement (cellId, convertedSinr);
@@ -1021,7 +1031,10 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
           neighStr += ",,,";
         }
 
-      uePmString.insert (std::make_pair (imsi, servingStr + neighStr));
+
+        uePmString.insert (std::make_pair (imsi, servingStr + neighStr));
+
+
 
       if (!indicationMessageHelper->IsOffline ())
         {
@@ -1551,6 +1564,380 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
     }
 }
 
+
+Ptr<KpmIndicationPair>
+MmWaveEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
+{
+  bool local_m_forceE2FileLogging;
+
+  if (m_forceE2FileLogging) {
+      local_m_forceE2FileLogging = true;
+  } else {
+      local_m_forceE2FileLogging = false;
+  }
+  if (m_e2andlog) {local_m_forceE2FileLogging = false;}
+
+  NS_LOG_DEBUG ("m_reducedPmValues" << m_reducedPmValues);
+  Ptr<MmWaveIndicationMessageHelper> indicationMessageHelper =
+      Create<MmWaveIndicationMessageHelper> (IndicationMessageHelper::IndicationMessageType::gNB,
+                                             local_m_forceE2FileLogging, m_reducedPmValues);
+
+  auto ueMap = m_rrc->GetUeMap ();
+  double cellDlTxVolume = 0;
+  double cellDlRxVolume = 0;
+  double perUserAverageLatencySum = 0;
+  uint32_t macPduCellSpecific = 0;
+  uint32_t macPduInitialCellSpecific = 0;
+  uint32_t macVolumeCellSpecific = 0;
+  uint32_t macQpskCellSpecific = 0;
+  uint32_t mac16QamCellSpecific = 0;
+  uint32_t mac64QamCellSpecific = 0;
+  uint32_t macRetxCellSpecific = 0;
+  uint32_t macMac04CellSpecific = 0;
+  uint32_t macMac59CellSpecific = 0;
+  uint32_t macMac1014CellSpecific = 0;
+  uint32_t macMac1519CellSpecific = 0;
+  uint32_t macMac2024CellSpecific = 0;
+  uint32_t macMac2529CellSpecific = 0;
+
+  uint32_t macSinrBin1CellSpecific = 0;
+  uint32_t macSinrBin2CellSpecific = 0;
+  uint32_t macSinrBin3CellSpecific = 0;
+  uint32_t macSinrBin4CellSpecific = 0;
+  uint32_t macSinrBin5CellSpecific = 0;
+  uint32_t macSinrBin6CellSpecific = 0;
+  uint32_t macSinrBin7CellSpecific = 0;
+
+  uint32_t rlcBufferOccupCellSpecific = 0;
+
+  uint32_t macPrbsCellSpecific = 0;
+
+
+
+ // std::unordered_map<uint64_t, std::string> uePmString{};
+
+  for (auto ue : ueMap)
+    {
+      uint64_t imsi = ue.second->GetImsi ();
+      std::string ueImsiComplete = GetImsiString (imsi);
+
+      Ptr<MeasurementItemList> ueVal = Create<MeasurementItemList> (ueImsiComplete);
+      long numDrb = ue.second->GetDrbMap ().size ();
+      double sinrThisCell = 10 * std::log10 (m_l3sinrMap[imsi][m_cellId]);
+      double convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinrThisCell);
+
+      /// update 1125
+
+      double sinrServCell = sinrThisCell;
+      double convertedSinrServCell = convertedSinr ;
+      uint16_t IDServCell = m_cellId;
+
+      double sinrNeigCell1 = -1;
+      double convertedSinrNeigCell1 =-1 ;
+      uint16_t IDNeigCell1 = -1;
+      double sinrNeigCell2 = -1;
+      double convertedSinrNeigCell2 =-1 ;
+      uint16_t IDNeigCell2 = -1;
+      double sinrNeigCell3 = -1;
+      double convertedSinrNeigCell3 =-1 ;
+      uint16_t IDNeigCell3 = -1;
+      double sinrNeigCell4 = -1;
+      double convertedSinrNeigCell4 =-1 ;
+      uint16_t IDNeigCell4 = -1;     
+      double sinrNeigCell5 = -1;
+      double convertedSinrNeigCell5 =-1 ;
+      uint16_t IDNeigCell5 = -1;     
+      double sinrNeigCell6 = -1;
+      double convertedSinrNeigCell6 = -1 ;
+      uint16_t IDNeigCell6 = -1;      
+      double sinrNeigCell7 = -1;
+      double convertedSinrNeigCell7 =-1 ;
+      uint16_t IDNeigCell7 = -1;
+      double sinrNeigCell8 = -1;
+      double convertedSinrNeigCell8 =-1 ;
+      uint16_t IDNeigCell8 = -1;
+
+      double sinr_update;
+
+      std::multimap<long double, uint16_t> sortFlipMap_update = flip_map (m_l3sinrMap[imsi]);
+
+      uint16_t nNeighbours_update = E2SM_REPORT_MAX_NEIGH;
+      if (m_l3sinrMap[imsi].size () < nNeighbours_update)
+        {
+          nNeighbours_update = m_l3sinrMap[imsi].size () - 1;
+        }
+
+      int itIndex_update = 0;
+      for (std::map<long double, uint16_t>::iterator it = --sortFlipMap_update.end ();
+           it != --sortFlipMap_update.begin () && itIndex_update < nNeighbours_update; it--)
+        {
+          uint16_t cellId = it->second;
+          if (cellId != m_cellId)
+            {
+              sinr_update = 10 * std::log10 (it->first); // now SINR is a key due to the sort of the map
+              convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinr_update);
+
+              if (itIndex_update == 0) {
+                   sinrNeigCell1 = sinr_update;
+                   convertedSinrNeigCell1 =convertedSinr ;
+                   IDNeigCell1 = cellId;
+              } else if (itIndex_update == 1) {
+                   sinrNeigCell2 = sinr_update;
+                   convertedSinrNeigCell2 =convertedSinr ;
+                   IDNeigCell2 = cellId;
+              } else if (itIndex_update == 2) {
+                   sinrNeigCell3 = sinr_update;
+                   convertedSinrNeigCell3 =convertedSinr ;
+                   IDNeigCell3 = cellId;
+              } else if (itIndex_update == 3) {
+                   sinrNeigCell4 = sinr_update;
+                   convertedSinrNeigCell4 =convertedSinr ;
+                   IDNeigCell4 = cellId;
+              } else if (itIndex_update == 4) {
+                   sinrNeigCell5 = sinr_update;
+                   convertedSinrNeigCell5 =convertedSinr ;
+                   IDNeigCell5 = cellId;
+              } else if (itIndex_update == 5) {
+                   sinrNeigCell6 = sinr_update;
+                   convertedSinrNeigCell6 =convertedSinr ;
+                   IDNeigCell6 = cellId;
+              } else if (itIndex_update == 6) {
+                   sinrNeigCell7 = sinr_update;
+                   convertedSinrNeigCell7 =convertedSinr ;
+                   IDNeigCell7 = cellId;
+              } else if (itIndex_update == 7) {
+                    sinrNeigCell8 = sinr_update;
+                    convertedSinrNeigCell8 =convertedSinr ;
+                    IDNeigCell8 = cellId;
+              }
+
+              itIndex_update++;
+            }
+        }
+
+      /// update 1125
+
+
+      //long txDlPackets =  m_e2PdcpStatsCalculator->GetDlTxPackets (imsi, 3); // LCID 3 is used for data
+      double txBytes =
+          m_e2PdcpStatsCalculator->GetDlTxData (imsi, 3) * 8 / 1e3; // in kbit, not byte
+      double rxBytes =
+          m_e2PdcpStatsCalculator->GetDlRxData (imsi, 3) * 8 / 1e3; // in kbit, not byte
+      cellDlTxVolume += txBytes;
+      cellDlRxVolume += rxBytes;
+
+      long txPdcpPduNrRlc = 0;
+      double txPdcpPduBytesNrRlc = 0;
+
+      auto drbMap = ue.second->GetDrbMap ();
+      for (auto drb : drbMap)
+        {
+          txPdcpPduNrRlc += drb.second->m_rlc->GetTxPacketsInReportingPeriod ();
+          txPdcpPduBytesNrRlc += drb.second->m_rlc->GetTxBytesInReportingPeriod ();
+          drb.second->m_rlc->ResetRlcCounters ();
+        }
+
+      auto rlcMap = ue.second->GetRlcMap (); // secondary-connected RLCs
+      for (auto drb : rlcMap)
+        {
+          txPdcpPduNrRlc += drb.second->m_rlc->GetTxPacketsInReportingPeriod ();
+          txPdcpPduBytesNrRlc += drb.second->m_rlc->GetTxBytesInReportingPeriod ();
+          drb.second->m_rlc->ResetRlcCounters ();
+        }
+      txPdcpPduBytesNrRlc *= 8 / 1e3;
+
+      double pdcpLatency = m_e2PdcpStatsCalculator->GetDlDelay (imsi, 3) / 1e5; // unit: x 0.1 ms
+      perUserAverageLatencySum += pdcpLatency;
+
+      //double pdcpThroughput = txBytes / m_e2Periodicity; // unit kbps
+      double pdcpThroughputRx = rxBytes / m_e2Periodicity; // unit kbps
+
+      if (m_drbThrDlPdcpBasedComputationUeid.find (imsi) !=
+          m_drbThrDlPdcpBasedComputationUeid.end ())
+        {
+          m_drbThrDlPdcpBasedComputationUeid.at (imsi) += pdcpThroughputRx;
+        }
+      else
+        {
+          m_drbThrDlPdcpBasedComputationUeid[imsi] = pdcpThroughputRx;
+        }
+
+      // compute bitrate based on RLC statistics, decoupled from pdcp throughput
+      double rlcLatency = m_e2RlcStatsCalculator->GetDlDelay (imsi, 3) / 1e9; // unit: s
+      double pduStats =
+          m_e2RlcStatsCalculator->GetDlPduSizeStats (imsi, 3)[0] * 8.0 / 1e3; // unit kbit
+      double rlcBitrate = (rlcLatency == 0) ? 0 : pduStats / rlcLatency; // unit kbit/s
+
+      m_drbThrDlUeid[imsi] = rlcBitrate;
+
+      //DU 
+      uint16_t rnti = ue.second->GetRnti ();
+      uint32_t macPduUe = m_e2DuCalculator->GetMacPduUeSpecific (rnti, m_cellId);
+      macPduCellSpecific += macPduUe;
+      uint32_t macPduInitialUe =
+          m_e2DuCalculator->GetMacPduInitialTransmissionUeSpecific (rnti, m_cellId);
+      macPduInitialCellSpecific += macPduInitialUe;
+
+      uint32_t macVolume = m_e2DuCalculator->GetMacVolumeUeSpecific (rnti, m_cellId);
+      macVolumeCellSpecific += macVolume;
+
+      uint32_t macQpsk = m_e2DuCalculator->GetMacPduQpskUeSpecific (rnti, m_cellId);
+      macQpskCellSpecific += macQpsk;
+
+      uint32_t mac16Qam = m_e2DuCalculator->GetMacPdu16QamUeSpecific (rnti, m_cellId);
+      mac16QamCellSpecific += mac16Qam;
+
+      uint32_t mac64Qam = m_e2DuCalculator->GetMacPdu64QamUeSpecific (rnti, m_cellId);
+      mac64QamCellSpecific += mac64Qam;
+
+      uint32_t macRetx = m_e2DuCalculator->GetMacPduRetransmissionUeSpecific (rnti, m_cellId);
+      macRetxCellSpecific += macRetx;
+
+      // Numerator = (Sum of number of symbols across all rows (TTIs) group by cell ID and UE ID within a given time window)
+      double macNumberOfSymbols =
+          m_e2DuCalculator->GetMacNumberOfSymbolsUeSpecific (rnti, m_cellId);
+
+      auto phyMac = GetMac ()->GetConfigurationParameters ();
+      // Denominator = (Periodicity of the report time window in ms*number of TTIs per ms*14)
+      Time reportingWindow =
+          Simulator::Now () - m_e2DuCalculator->GetLastResetTime (rnti, m_cellId);
+      double denominatorPrb = std::ceil (reportingWindow.GetNanoSeconds () /
+                                         phyMac->GetSlotPeriod ().GetNanoSeconds ()) *
+                              14;
+      double macPrb = 0;
+      if (denominatorPrb != 0)
+        {
+          macPrb =
+              macNumberOfSymbols / denominatorPrb * 139; // TODO fix this for different numerologies
+        }
+      macPrbsCellSpecific += macPrb;
+
+      uint32_t macMac04 = m_e2DuCalculator->GetMacMcs04UeSpecific (rnti, m_cellId);
+      macMac04CellSpecific += macMac04;
+
+      uint32_t macMac59 = m_e2DuCalculator->GetMacMcs59UeSpecific (rnti, m_cellId);
+      macMac59CellSpecific += macMac59;
+
+      uint32_t macMac1014 = m_e2DuCalculator->GetMacMcs1014UeSpecific (rnti, m_cellId);
+      macMac1014CellSpecific += macMac1014;
+
+      uint32_t macMac1519 = m_e2DuCalculator->GetMacMcs1519UeSpecific (rnti, m_cellId);
+      macMac1519CellSpecific += macMac1519;
+
+      uint32_t macMac2024 = m_e2DuCalculator->GetMacMcs2024UeSpecific (rnti, m_cellId);
+      macMac2024CellSpecific += macMac2024;
+
+      uint32_t macMac2529 = m_e2DuCalculator->GetMacMcs2529UeSpecific (rnti, m_cellId);
+      macMac2529CellSpecific += macMac2529;
+
+      uint32_t macSinrBin1 = m_e2DuCalculator->GetMacSinrBin1UeSpecific (rnti, m_cellId);
+      macSinrBin1CellSpecific += macSinrBin1;
+
+      uint32_t macSinrBin2 = m_e2DuCalculator->GetMacSinrBin2UeSpecific (rnti, m_cellId);
+      macSinrBin2CellSpecific += macSinrBin2;
+
+      uint32_t macSinrBin3 = m_e2DuCalculator->GetMacSinrBin3UeSpecific (rnti, m_cellId);
+      macSinrBin3CellSpecific += macSinrBin3;
+
+      uint32_t macSinrBin4 = m_e2DuCalculator->GetMacSinrBin4UeSpecific (rnti, m_cellId);
+      macSinrBin4CellSpecific += macSinrBin4;
+
+      uint32_t macSinrBin5 = m_e2DuCalculator->GetMacSinrBin5UeSpecific (rnti, m_cellId);
+      macSinrBin5CellSpecific += macSinrBin5;
+
+      uint32_t macSinrBin6 = m_e2DuCalculator->GetMacSinrBin6UeSpecific (rnti, m_cellId);
+      macSinrBin6CellSpecific += macSinrBin6;
+
+      uint32_t macSinrBin7 = m_e2DuCalculator->GetMacSinrBin7UeSpecific (rnti, m_cellId);
+      macSinrBin7CellSpecific += macSinrBin7;
+
+      // get buffer occupancy info
+      uint32_t rlcBufferOccup = 0;
+      for (auto drb : drbMap)
+        {
+          auto rlc = drb.second->m_rlc;
+          rlcBufferOccup += GetRlcBufferOccupancy (rlc);
+        }
+       // secondary-connected RLCs
+      for (auto drb : rlcMap)
+        {
+          auto rlc = drb.second->m_rlc;
+          rlcBufferOccup += GetRlcBufferOccupancy (rlc);
+        }
+      rlcBufferOccupCellSpecific += rlcBufferOccup;
+      /* Not Used
+      double drbThrDlPdcpBasedUeid = m_drbThrDlPdcpBasedComputationUeid.find (imsi) !=
+                                             m_drbThrDlPdcpBasedComputationUeid.end ()
+                                         ? m_drbThrDlPdcpBasedComputationUeid.at (imsi)
+                                         : 0;
+      */  
+      // UE-specific Downlink IP combined EN-DC throughput from LTE eNB. Unit is kbps. Rlc based computation
+      double drbThrDlUeid =
+          m_drbThrDlUeid.find (imsi) != m_drbThrDlUeid.end () ? m_drbThrDlUeid.at (imsi) : 0;
+
+      m_e2DuCalculator->ResetPhyTracesForRntiCellId (rnti, m_cellId);
+
+
+      m_e2PdcpStatsCalculator->ResetResultsForImsiLcid (imsi, 3);
+      long drbRelAct = 0;
+      indicationMessageHelper->AddgNBUeItem (ueImsiComplete, numDrb, drbRelAct,
+                      txPdcpPduBytesNrRlc, txPdcpPduNrRlc, 
+                      macPduUe, macPduInitialUe, macQpsk, 
+                      mac16Qam, mac64Qam, macRetx, 
+                      macVolume,  macPrb, macMac04, 
+                      macMac59, macMac1014, macMac1519, 
+                      macMac2024, macMac2529, macSinrBin1,
+                      macSinrBin2, macSinrBin3, macSinrBin4, 
+                      macSinrBin5, macSinrBin6, macSinrBin7, 
+                      rlcBufferOccup, drbThrDlUeid,
+                       sinrServCell,  convertedSinrServCell,  IDServCell,
+                       sinrNeigCell1,  convertedSinrNeigCell1,   IDNeigCell1,
+                       sinrNeigCell2,  convertedSinrNeigCell2,   IDNeigCell2,
+                       sinrNeigCell3,  convertedSinrNeigCell3,   IDNeigCell3,
+                       sinrNeigCell4,  convertedSinrNeigCell4,   IDNeigCell4,
+                       sinrNeigCell5,  convertedSinrNeigCell5,   IDNeigCell5,
+                       sinrNeigCell6,  convertedSinrNeigCell6,   IDNeigCell6,   
+                       sinrNeigCell7,  convertedSinrNeigCell7,   IDNeigCell7,   
+                       sinrNeigCell8,  convertedSinrNeigCell8,   IDNeigCell8 );
+
+    }
+  m_drbThrDlPdcpBasedComputationUeid.clear ();
+  m_drbThrDlUeid.clear ();
+
+  ////CELL DU
+  double prbUtilizationDl = macPrbsCellSpecific;
+  long dlAvailablePrbs = 139; // TODO this is for the current configuration, make it configurable
+  long ulAvailablePrbs = 139; // TODO this is for the current configuration, make it configurable
+  long qci = 1;
+  long dlPrbUsage = std::min ((long) (prbUtilizationDl / dlAvailablePrbs * 100),
+                              (long) 100); // percentage of used PRBs
+  long ulPrbUsage = 0; // TODO for future implementation
+  long numActiveUes = ueMap.size ();
+
+  long activeUeDl =  ueMap.size ();
+  
+ indicationMessageHelper-> AddgNBCellItem (m_cellId, numActiveUes,
+     macPduCellSpecific,  macPduInitialCellSpecific,  macQpskCellSpecific,
+     mac16QamCellSpecific,  mac64QamCellSpecific,  prbUtilizationDl,
+     macRetxCellSpecific,  macVolumeCellSpecific,  macMac04CellSpecific,
+     macMac59CellSpecific,  macMac1014CellSpecific,  macMac1519CellSpecific,
+     macMac2024CellSpecific,  macMac2529CellSpecific,  macSinrBin1CellSpecific,
+     macSinrBin2CellSpecific,  macSinrBin3CellSpecific,  macSinrBin4CellSpecific,
+     macSinrBin5CellSpecific,  macSinrBin6CellSpecific,  macSinrBin7CellSpecific,
+     rlcBufferOccupCellSpecific,  activeUeDl,
+     dlAvailablePrbs,  ulAvailablePrbs,  qci,
+     dlPrbUsage,  ulPrbUsage);
+
+
+    Ptr<KpmIndicationPair> msgs = CreateObject<KpmIndicationPair>();
+    msgs->cell =indicationMessageHelper->CreateIndicationMessage("cell");
+    msgs->ue   = indicationMessageHelper->CreateIndicationMessage("ue");
+    return msgs;
+
+}
+
+
+
 void
 MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionRequest_rval_s params)
 {
@@ -1754,6 +2141,72 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
           //delete pdu_du_ue;
         }
     }
+
+  if (m_sendNB)
+  {
+      // Create Aggregated Message
+      Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
+      auto nbMsg_pair = BuildRicIndicationMessageNB (plmId);
+      auto nbCellMsg = nbMsg_pair->cell;
+      auto nbUeMsg   = nbMsg_pair->ue;
+
+      // Send CU-UP only if offline logging is disabled
+      if (!m_forceE2FileLogging && header != nullptr && nbCellMsg != nullptr  && nbUeMsg != nullptr)
+        {
+          if (m_sendNB_ue) {
+            NS_LOG_DEBUG ("Creating mmWave gNB UE Indication message");
+
+            E2AP_PDU *pdu_nb_ue = new E2AP_PDU;
+            encoding::generate_e2apv1_indication_request_parameterized (
+                pdu_nb_ue, params.requestorId, params.instanceId, params.ranFuncionId,
+                params.actionId,
+                1, // TODO sequence number
+                (uint8_t*)header->m_buffer, // buffer containing the encoded header
+                (int)header->m_size,// size of the encoded header
+                (uint8_t *) nbUeMsg->m_buffer, // buffer containing the encoded message
+                (int)nbUeMsg->m_size); // size of the encoded message
+            NS_LOG_DEBUG ("Created mmWave gNB UE Indication message");
+
+            if (nbUeMsg->m_buffer) {
+                free(nbUeMsg->m_buffer);
+                nbUeMsg->m_buffer = nullptr;
+                nbUeMsg->m_size   = 0;
+            }
+            NS_LOG_DEBUG ("Sending mmWave gNB UE Indication message");
+            m_e2term->SendE2Message (pdu_nb_ue);
+            NS_LOG_DEBUG ("Send mmWave gNB UE Indication message");
+          } 
+          if (m_sendNB_cell) { 
+            E2AP_PDU *pdu_nb_cell = new E2AP_PDU;
+
+            encoding::generate_e2apv1_indication_request_parameterized (
+                pdu_nb_cell, params.requestorId, params.instanceId, params.ranFuncionId,
+                params.actionId,
+                1, // TODO sequence number
+                (uint8_t*)header->m_buffer, // buffer containing the encoded header
+                (int)header->m_size,// size of the encoded header
+                (uint8_t *) nbCellMsg->m_buffer, // buffer containing the encoded message
+                (int)nbCellMsg->m_size); // size of the encoded message
+            NS_LOG_DEBUG ("Created mmWave gNB cell Indication message");
+            if (header->m_buffer) {
+                free(header->m_buffer);
+                header->m_buffer = nullptr;
+                header->m_size   = 0;
+            }
+
+            if (nbCellMsg->m_buffer) {
+                free(nbCellMsg->m_buffer);
+                nbCellMsg->m_buffer = nullptr;
+                nbCellMsg->m_size   = 0;
+            }
+            NS_LOG_DEBUG ("Sending mmWave gNB cell Indication message");
+            m_e2term->SendE2Message (pdu_nb_cell);
+            NS_LOG_DEBUG ("Send mmWave gNB cell Indication message");
+          }
+          // To Do Check
+        }
+   } 
+
 
   if (m_stopSendingMessages)
     {

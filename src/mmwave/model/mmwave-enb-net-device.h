@@ -168,6 +168,8 @@ namespace ns3 {
 
             Ptr<KpmIndicationPair> BuildRicIndicationMessageDu(std::string plmId, uint16_t nrCellId);
            //update 1029
+            Ptr<KpmIndicationPair> BuildRicIndicationMessageNB(std::string plmId);
+
             std::string GetImsiString(uint64_t imsi);
 
             uint32_t GetRlcBufferOccupancy(Ptr<LteRlc> rlc) const;
@@ -176,6 +178,9 @@ namespace ns3 {
             bool m_sendCuCp;
             bool m_sendDu;
 
+                    bool m_sendNB; // add 1111
+        bool m_sendNB_ue ; // add 1111
+        bool m_sendNB_cell ; // add 1111
             static void
             RegisterNewSinrReadingCallback(Ptr<MmWaveEnbNetDevice> netDev, std::string context, uint64_t imsi,
                                            uint16_t cellId, long double sinr);

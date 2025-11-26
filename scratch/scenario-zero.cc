@@ -140,22 +140,36 @@ static ns3::GlobalValue g_enableTraces ("enableTraces", "If true, generate ns-3 
                                         ns3::BooleanValue (true), ns3::MakeBooleanChecker ());
 
 static ns3::GlobalValue g_e2lteEnabled ("e2lteEnabled", "If true, send LTE E2 reports",
-                                        ns3::BooleanValue (true), ns3::MakeBooleanChecker ());
+                                        ns3::BooleanValue (false), ns3::MakeBooleanChecker ());
 
 static ns3::GlobalValue g_e2nrEnabled ("e2nrEnabled", "If true, send NR E2 reports",
                                        ns3::BooleanValue (true), ns3::MakeBooleanChecker ());
 
-static ns3::GlobalValue g_e2du ("e2du", "If true, send DU reports", ns3::BooleanValue (true),
+static ns3::GlobalValue g_e2nb ("e2nb", "If true, send enb/gnb reports", ns3::BooleanValue (false),
                                 ns3::MakeBooleanChecker ());
 
-static ns3::GlobalValue g_e2cuUp ("e2cuUp", "If true, send CU-UP reports", ns3::BooleanValue (true),
+                                
+static ns3::GlobalValue g_e2gnb ("e2gnb", "If true, send enb/gnb reports", ns3::BooleanValue (true),
+                                ns3::MakeBooleanChecker ());
+
+
+static ns3::GlobalValue g_e2nb_ue ("e2nb_ue", "If true, send enb/gnb reports", ns3::BooleanValue (true),
+                                ns3::MakeBooleanChecker ());
+static ns3::GlobalValue g_e2nb_cell ("e2nb_cell", "If true, send enb/gnb reports", ns3::BooleanValue (true),
+                                ns3::MakeBooleanChecker ());
+
+                                
+static ns3::GlobalValue g_e2du ("e2du", "If true, send DU reports", ns3::BooleanValue (false),
+                                ns3::MakeBooleanChecker ());
+
+static ns3::GlobalValue g_e2cuUp ("e2cuUp", "If true, send CU-UP reports", ns3::BooleanValue (false),
                                   ns3::MakeBooleanChecker ());
 
-static ns3::GlobalValue g_e2cuCp ("e2cuCp", "If true, send CU-CP reports", ns3::BooleanValue (true),
+static ns3::GlobalValue g_e2cuCp ("e2cuCp", "If true, send CU-CP reports", ns3::BooleanValue (false),
                                   ns3::MakeBooleanChecker ());
-
+// **
 static ns3::GlobalValue g_reducedPmValues ("reducedPmValues", "If true, use a subset of the the pm containers",
-                                        ns3::BooleanValue (true), ns3::MakeBooleanChecker ());
+                                        ns3::BooleanValue (false), ns3::MakeBooleanChecker ());
 
 static ns3::GlobalValue
     g_hoSinrDifference ("hoSinrDifference",
@@ -208,8 +222,9 @@ int
 main (int argc, char *argv[])
 {
   LogComponentEnableAll (LOG_PREFIX_ALL);
-  LogComponentEnable ("E2Termination", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("LteEnbNetDevice", LOG_LEVEL_DEBUG);
   LogComponentEnable ("KpmIndication", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("IndicationMessageHelper", LOG_LEVEL_INFO);
 
   // The maximum X coordinate of the scenario
 
@@ -257,6 +272,14 @@ main (int argc, char *argv[])
   bool e2lteEnabled = booleanValue.Get ();
   GlobalValue::GetValueByName ("e2nrEnabled", booleanValue);
   bool e2nrEnabled = booleanValue.Get ();
+  GlobalValue::GetValueByName ("e2nb", booleanValue);
+  bool e2nb = booleanValue.Get ();
+  GlobalValue::GetValueByName ("e2nb_ue", booleanValue);
+  bool e2nb_ue = booleanValue.Get ();
+  GlobalValue::GetValueByName ("e2nb_cell", booleanValue);
+  bool e2nb_cell = booleanValue.Get ();
+  GlobalValue::GetValueByName ("e2gnb", booleanValue);
+  bool e2gnb = booleanValue.Get ();
   GlobalValue::GetValueByName ("e2du", booleanValue);
   bool e2du = booleanValue.Get ();
   GlobalValue::GetValueByName ("e2cuUp", booleanValue);
@@ -272,8 +295,9 @@ main (int argc, char *argv[])
   GlobalValue::GetValueByName ("controlFileName", stringValue);
   std::string controlFilename = stringValue.Get ();
 
-  NS_LOG_UNCOND ("e2lteEnabled " << e2lteEnabled << " e2nrEnabled " << e2nrEnabled << " e2du "
-                                 << e2du << " e2cuCp " << e2cuCp << " e2cuUp " << e2cuUp
+  NS_LOG_UNCOND ("e2lteEnabled " << e2lteEnabled << " e2nrEnabled " << e2nrEnabled 
+                                  <<  "e2nb" << e2nb <<  "e2nb_ue" << e2nb_ue <<  "e2nb_cell" << e2nb_cell 
+                                 << " e2du " << e2du << " e2cuCp " << e2cuCp << " e2cuUp " << e2cuUp
                                  << " controlFilename " << controlFilename
                                  << " indicationPeriodicity " << indicationPeriodicity);
 
@@ -285,6 +309,14 @@ main (int argc, char *argv[])
   Config::SetDefault ("ns3::MmWaveHelper::E2ModeLte", BooleanValue (e2lteEnabled));
   Config::SetDefault ("ns3::MmWaveHelper::E2ModeNr", BooleanValue (e2nrEnabled));
 
+ // add 1111
+  Config::SetDefault ("ns3::LteEnbNetDevice::EnableNBReport", BooleanValue (e2nb));
+  Config::SetDefault ("ns3::LteEnbNetDevice::EnableNBUEReport", BooleanValue (e2nb_ue));
+  Config::SetDefault ("ns3::LteEnbNetDevice::EnableNBCellReport", BooleanValue (e2nb_cell));
+
+  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnablgNBReport", BooleanValue (e2gnb));
+  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnablgNBUEReport", BooleanValue (e2nb_ue));
+  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnablgNBCellReport", BooleanValue (e2nb_cell));
   // The DU PM reports should come from both NR gNB as well as LTE eNB,
   // since in the RLC/MAC/PHY entities are present in BOTH NR gNB as well as LTE eNB.
   // DU reports from LTE eNB are not implemented in this release
@@ -364,7 +396,7 @@ main (int argc, char *argv[])
   Ptr<MmWavePointToPointEpcHelper> epcHelper = CreateObject<MmWavePointToPointEpcHelper> ();
   mmwaveHelper->SetEpcHelper (epcHelper);
 
-  uint8_t nMmWaveEnbNodes = 3;
+  uint8_t nMmWaveEnbNodes = 1;
   uint8_t nLteEnbNodes = 1;
   uint32_t ues = 5;
   uint8_t nUeNodes = ues* nMmWaveEnbNodes;

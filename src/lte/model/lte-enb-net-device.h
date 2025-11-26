@@ -268,7 +268,8 @@ namespace ns3 {
         //update 1029
         Ptr<KpmIndicationPair> BuildRicIndicationMessageCuUp(std::string plmId);
         Ptr<KpmIndicationPair> BuildRicIndicationMessageCuCp(std::string plmId);
-        //update 1029
+        //update 1111
+        Ptr<KpmIndicationPair> BuildRicIndicationMessageNB (std::string plmId);
 
         std::string GetImsiString(uint64_t imsi);
 
@@ -302,6 +303,11 @@ namespace ns3 {
         Ptr<mmwave::MmWaveBearerStatsCalculator> m_e2RlcStatsCalculator;
 
         double m_e2Periodicity;
+
+        bool m_sendNB; // add 1111
+        bool m_sendNB_ue ; // add 1111
+        bool m_sendNB_cell ; // add 1111
+
 
         bool m_sendCuUp;
         bool m_sendCuCp;
