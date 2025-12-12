@@ -140,12 +140,12 @@ static ns3::GlobalValue g_enableTraces ("enableTraces", "If true, generate ns-3 
                                         ns3::BooleanValue (true), ns3::MakeBooleanChecker ());
 
 static ns3::GlobalValue g_e2lteEnabled ("e2lteEnabled", "If true, send LTE E2 reports",
-                                        ns3::BooleanValue (false), ns3::MakeBooleanChecker ());
+                                        ns3::BooleanValue (true), ns3::MakeBooleanChecker ());
 
 static ns3::GlobalValue g_e2nrEnabled ("e2nrEnabled", "If true, send NR E2 reports",
                                        ns3::BooleanValue (true), ns3::MakeBooleanChecker ());
 
-static ns3::GlobalValue g_e2nb ("e2nb", "If true, send enb/gnb reports", ns3::BooleanValue (false),
+static ns3::GlobalValue g_e2nb ("e2nb", "If true, send enb/gnb reports", ns3::BooleanValue (true),
                                 ns3::MakeBooleanChecker ());
 
                                 
@@ -225,6 +225,10 @@ main (int argc, char *argv[])
   LogComponentEnable ("LteEnbNetDevice", LOG_LEVEL_DEBUG);
   LogComponentEnable ("KpmIndication", LOG_LEVEL_DEBUG);
   LogComponentEnable ("IndicationMessageHelper", LOG_LEVEL_INFO);
+  LogComponentEnable ("RicControlMessage", LOG_LEVEL_DEBUG);
+  LogComponentEnable ("KpmFunctionDescription", LOG_LEVEL_DEBUG);
+
+  //LogComponentEnable ("LteEnbRrc", LOG_LEVEL_DEBUG);
 
   // The maximum X coordinate of the scenario
 
@@ -396,7 +400,7 @@ main (int argc, char *argv[])
   Ptr<MmWavePointToPointEpcHelper> epcHelper = CreateObject<MmWavePointToPointEpcHelper> ();
   mmwaveHelper->SetEpcHelper (epcHelper);
 
-  uint8_t nMmWaveEnbNodes = 1;
+  uint8_t nMmWaveEnbNodes = 4;
   uint8_t nLteEnbNodes = 1;
   uint32_t ues = 5;
   uint8_t nUeNodes = ues* nMmWaveEnbNodes;

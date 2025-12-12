@@ -820,8 +820,8 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
 
       if (!indicationMessageHelper->IsOffline ())
         {
-          indicationMessageHelper->AddCuUpUePmItem (ueImsiComplete, txPdcpPduBytesNrRlc,
-                                                    txPdcpPduNrRlc);
+         // indicationMessageHelper->AddCuUpUePmItem (ueImsiComplete, txPdcpPduBytesNrRlc,
+          //                                          txPdcpPduNrRlc);
         }
 
       uePmString.insert (std::make_pair (imsi, ",,,," + std::to_string (txPdcpPduBytesNrRlc) + "," +
@@ -830,7 +830,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
 
   if (!indicationMessageHelper->IsOffline ())
     {
-      indicationMessageHelper->FillCuUpValues (plmId);
+    //  indicationMessageHelper->FillCuUpValues (plmId);
     }
 
   NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
@@ -952,9 +952,10 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
       // IMP: create L3 RRC reports
 
       // for the same cell
-      double sinrThisCell = 10 * std::log10 (m_l3sinrMap[imsi][m_cellId]);
-      double convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinrThisCell);
-
+        double sinrThisCell = 10 * std::log10 (m_l3sinrMap[imsi][m_cellId]);
+     // double convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinrThisCell);
+        double convertedSinr = 0;
+      /*
       Ptr<L3RrcMeasurements> l3RrcMeasurementServing;
       if (!indicationMessageHelper->IsOffline ())
         {
@@ -963,6 +964,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
               l3RrcMeasurementServing = L3RrcMeasurements::CreateL3RrcUeSpecificSinrServing (
               m_cellId, m_cellId, sinrThisCell);
         }
+        */
       NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
                     << " enbdev " << m_cellId << " UE " << imsi << " L3 serving SINR "
                     << sinrThisCell << " L3 serving SINR 3gpp " << convertedSinr);
@@ -981,12 +983,13 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
       // For the neighbors
       // TODO create double map, imsi -> cell -> sinr
       // TODO store at most 8 reports for each UE, as per the standard
-
+      /*
       Ptr<L3RrcMeasurements> l3RrcMeasurementNeigh;
       if (!indicationMessageHelper->IsOffline ())
         {
           l3RrcMeasurementNeigh = L3RrcMeasurements::CreateL3RrcUeSpecificSinrNeigh ();
         }
+          */
       double sinr;
       std::string neighStr;
 
@@ -1008,12 +1011,12 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
           if (cellId != m_cellId)
             {
               sinr = 10 * std::log10 (it->first); // now SINR is a key due to the sort of the map
-              convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinr);
+              //convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinr);
 
               if (!indicationMessageHelper->IsOffline ())
                 {
                   // l3RrcMeasurementNeigh->AddNeighbourCellMeasurement (cellId, convertedSinr);
-                  l3RrcMeasurementNeigh->AddNeighbourCellMeasurement (cellId, sinr);
+              //    l3RrcMeasurementNeigh->AddNeighbourCellMeasurement (cellId, sinr);
 
                 }
               // Mostafa
@@ -1041,15 +1044,15 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
           // indicationMessageHelper->AddCuCpUePmItem (ueImsiComplete, numDrb, 0,
           //                                           l3RrcMeasurementServing, l3RrcMeasurementNeigh,
           //                                            m_cellId, imsi, sinrThisCell, convertedSinr );
-          indicationMessageHelper->AddCuCpUePmItem (ueImsiComplete, numDrb, 0,
-                                                    l3RrcMeasurementServing, l3RrcMeasurementNeigh);                                                     
+          //indicationMessageHelper->AddCuCpUePmItem (ueImsiComplete, numDrb, 0,
+          //                                          l3RrcMeasurementServing, l3RrcMeasurementNeigh);                                                     
         }
     }
 
   if (!indicationMessageHelper->IsOffline ())
     {
       // Fill CuCp specific fields
-      indicationMessageHelper->FillCuCpValues (ueMap.size ()); // Number of Active UEs
+      //indicationMessageHelper->FillCuCpValues (ueMap.size ()); // Number of Active UEs
     }
 
   if (m_forceE2FileLogging)
@@ -1325,13 +1328,13 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
       // UE-specific Downlink IP combined EN-DC throughput from LTE eNB. Unit is kbps. Rlc based computation
       double drbThrDlUeid =
           m_drbThrDlUeid.find (imsi) != m_drbThrDlUeid.end () ? m_drbThrDlUeid.at (imsi) : 0;
-
+      /*
       indicationMessageHelper->AddDuUePmItem (
           ueImsiComplete, macPduUe, macPduInitialUe, macQpsk, mac16Qam, mac64Qam, macRetx,
           macVolume, macPrb, macMac04, macMac59, macMac1014, macMac1519, macMac2024, macMac2529,
           macSinrBin1, macSinrBin2, macSinrBin3, macSinrBin4, macSinrBin5, macSinrBin6, macSinrBin7,
           rlcBufferOccup, drbThrDlUeid);
-
+      */
       uePmStringDu.insert (std::make_pair (
           imsi, std::to_string (macPduUe) + "," + std::to_string (macPduInitialUe) + "," +
                     std::to_string (macQpsk) + "," + std::to_string (mac16Qam) + "," +
@@ -1382,7 +1385,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
   long dlPrbUsage = std::min ((long) (prbUtilizationDl / dlAvailablePrbs * 100),
                               (long) 100); // percentage of used PRBs
   long ulPrbUsage = 0; // TODO for future implementation
-
+    /*
   if (!indicationMessageHelper->IsOffline ())
     {
       indicationMessageHelper->AddDuCellPmItem (
@@ -1415,7 +1418,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
       indicationMessageHelper->AddDuCellResRepPmItem (cellResRep);
       indicationMessageHelper->FillDuValues (plmId + std::to_string (nrCellId));
     }
-
+*/
   if (false && m_forceE2FileLogging)
     {
       std::ofstream csv{};
@@ -1624,38 +1627,38 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
       Ptr<MeasurementItemList> ueVal = Create<MeasurementItemList> (ueImsiComplete);
       long numDrb = ue.second->GetDrbMap ().size ();
       double sinrThisCell = 10 * std::log10 (m_l3sinrMap[imsi][m_cellId]);
-      double convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinrThisCell);
-
+      //double convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinrThisCell);
+      double convertedSinr = 0;
       /// update 1125
 
       double sinrServCell = sinrThisCell;
-      double convertedSinrServCell = convertedSinr ;
+      double convertedSinrServCell = 0 ;
       uint16_t IDServCell = m_cellId;
 
-      double sinrNeigCell1 = -1;
-      double convertedSinrNeigCell1 =-1 ;
-      uint16_t IDNeigCell1 = -1;
-      double sinrNeigCell2 = -1;
-      double convertedSinrNeigCell2 =-1 ;
-      uint16_t IDNeigCell2 = -1;
-      double sinrNeigCell3 = -1;
-      double convertedSinrNeigCell3 =-1 ;
-      uint16_t IDNeigCell3 = -1;
-      double sinrNeigCell4 = -1;
-      double convertedSinrNeigCell4 =-1 ;
-      uint16_t IDNeigCell4 = -1;     
-      double sinrNeigCell5 = -1;
-      double convertedSinrNeigCell5 =-1 ;
-      uint16_t IDNeigCell5 = -1;     
-      double sinrNeigCell6 = -1;
-      double convertedSinrNeigCell6 = -1 ;
-      uint16_t IDNeigCell6 = -1;      
-      double sinrNeigCell7 = -1;
-      double convertedSinrNeigCell7 =-1 ;
-      uint16_t IDNeigCell7 = -1;
-      double sinrNeigCell8 = -1;
-      double convertedSinrNeigCell8 =-1 ;
-      uint16_t IDNeigCell8 = -1;
+      double sinrNeigCell1 = 0;
+      double convertedSinrNeigCell1 =0 ;
+      uint16_t IDNeigCell1 = 0;
+      double sinrNeigCell2 = 0;
+      double convertedSinrNeigCell2 =0 ;
+      uint16_t IDNeigCell2 = 0;
+      double sinrNeigCell3 = 0;
+      double convertedSinrNeigCell3 =0 ;
+      uint16_t IDNeigCell3 = 0;
+      double sinrNeigCell4 = 0;
+      double convertedSinrNeigCell4 =0 ;
+      uint16_t IDNeigCell4 = 0;     
+      double sinrNeigCell5 = 0;
+      double convertedSinrNeigCell5 =0 ;
+      uint16_t IDNeigCell5 = 0;     
+      double sinrNeigCell6 = 0;
+      double convertedSinrNeigCell6 = 0 ;
+      uint16_t IDNeigCell6 = 0;      
+      double sinrNeigCell7 = 0;
+      double convertedSinrNeigCell7 =0 ;
+      uint16_t IDNeigCell7 = 0;
+      double sinrNeigCell8 = 0;
+      double convertedSinrNeigCell8 =0 ;
+      uint16_t IDNeigCell8 = 0;
 
       double sinr_update;
 
@@ -1675,7 +1678,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
           if (cellId != m_cellId)
             {
               sinr_update = 10 * std::log10 (it->first); // now SINR is a key due to the sort of the map
-              convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinr_update);
+              //convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinr_update);
 
               if (itIndex_update == 0) {
                    sinrNeigCell1 = sinr_update;

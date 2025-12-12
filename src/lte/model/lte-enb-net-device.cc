@@ -181,32 +181,41 @@ LteEnbNetDevice::ControlMessageReceivedCallback (E2AP_PDU_t *sub_req_pdu)
 
   // Create RIC Control ACK
   Ptr<RicControlMessage> controlMessage = Create<RicControlMessage> (sub_req_pdu);
-  NS_LOG_INFO ("After RicControlMessage::RicControlMessage constructor");
-  NS_LOG_INFO ("Request type " << controlMessage->m_requestType);
+  NS_LOG_DEBUG ("After RicControlMessage::RicControlMessage constructor");
+  NS_LOG_DEBUG ("Request type " << controlMessage->m_requestType);
+
   switch (controlMessage->m_requestType)
     {
       case RicControlMessage::ControlMessageRequestIdType::TS: {
-        NS_LOG_INFO ("TS, do the handover");
+        NS_LOG_DEBUG ("TS, do the handover");
         // do handover
+        /*ㅌ
         Ptr<OctetString> imsiString = Create<OctetString> (
             (void *) controlMessage->m_e2SmRcControlHeaderFormat1->ueID.choice.gNB_UEID,
             controlMessage->m_e2SmRcControlHeaderFormat1->ueID.present); //this line need to fix
         char *end;
 
         uint64_t imsi = std::strtoull (imsiString->DecodeContent ().c_str (), &end, 10);
-        uint16_t targetCellId = std::stoi (controlMessage->GetSecondaryCellIdHO ());
-        NS_LOG_INFO ("Imsi Decoded: " << imsi);
-        NS_LOG_INFO ("Target Cell id " << targetCellId);
+        */
+        uint64_t imsi = controlMessage->GetUeId();
+        NS_LOG_DEBUG ("Imsi Decoded: " << imsi);
+        
+        //uint16_t targetCellId = std::stoi (controlMessage->GetSecondaryCellIdHO ())
+        uint16_t targetCellId = controlMessage->GetTargetCell();
+
+        NS_LOG_DEBUG ("Target Cell id " << targetCellId);
+        //m_rrc->TakeUeHoControl (imsi);
         m_rrc->TakeUeHoControl (imsi);
+
         if (!m_forceE2FileLogging)
           {
             Simulator::ScheduleWithContext (1, Seconds (0), &LteEnbRrc::PerformHandoverToTargetCell,
-                                            m_rrc, imsi, targetCellId);
+                                            m_rrc, imsi, targetCellId); // imsi 가 ueID로
           }
         else
           {
             Simulator::Schedule (Seconds (0), &LteEnbRrc::PerformHandoverToTargetCell, m_rrc, imsi,
-                                 targetCellId);
+                                 targetCellId); // imsi 가 ueID로
           }
         break;
       }
@@ -216,7 +225,7 @@ LteEnbNetDevice::ControlMessageReceivedCallback (E2AP_PDU_t *sub_req_pdu)
         break;
       }
       default: {
-        NS_LOG_INFO ("Unrecognized id type of Ric Control Message");
+        NS_LOG_DEBUG ("Unrecognized id type of Ric Control Message");
         break;
       }
     }
@@ -726,17 +735,21 @@ LteEnbNetDevice::SetE2Termination (Ptr<E2Termination> e2term)
       long m_e2_func_id = long (e2_func_id);
       long m_rc_e2_func_id = long (rc_e2_func_id); 
       // update
+
       int nb_type = 0;
       Ptr<KpmFunctionDescription> kpmFd = Create<KpmFunctionDescription> (nb_type);
+
+
       e2term->RegisterKpmCallbackToE2Sm (
           m_e2_func_id, kpmFd,
           std::bind (&LteEnbNetDevice::KpmSubscriptionCallback, this, std::placeholders::_1));
-
+      
       Ptr<RicControlFunctionDescription> ricCtrlFd = Create<RicControlFunctionDescription> ();
+
       e2term->RegisterSmCallbackToE2Sm (m_rc_e2_func_id, ricCtrlFd,
                                        std::bind (&LteEnbNetDevice::ControlMessageReceivedCallback,
                                                    this, std::placeholders::_1));
-
+      
       // Mostafa-FD-TODO
       // Ptr<RicDeletelFunctionDescription> ricDeletelFd = Create<RicDeletelFunctionDescription> ();
       // e2term->RegisterSmCallbackToE2Sm (4, static_cast<Ptr<FunctionDescription>>(ricDeletelFd),
@@ -797,7 +810,7 @@ LteEnbNetDevice::BuildRicIndicationHeader (std::string plmId, std::string gnbId,
       return nullptr;
     }
 }
-
+// To be update
 Ptr<KpmIndicationPair>
 LteEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
 {
@@ -875,13 +888,13 @@ LteEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
                     << " pdcpThroughput " << pdcpThroughput);
 
       m_e2PdcpStatsCalculator->ResetResultsForImsiLcid (imsi, 3);
-
+        /*
       if (!indicationMessageHelper->IsOffline ())
         {
           indicationMessageHelper->AddCuUpUePmItem (ueImsiComplete, txBytes, txDlPackets,
                                                     pdcpThroughput, pdcpLatency);
         }
-
+        */
       uePmString.insert (std::make_pair (
           imsi, std::to_string (txBytes) + "," + std::to_string (txDlPackets) + "," +
                     std::to_string (pdcpThroughput) + "," + std::to_string (pdcpLatency)));
@@ -900,14 +913,14 @@ LteEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
 
   if (!indicationMessageHelper->IsOffline ())
     {
-      indicationMessageHelper->AddCuUpCellPmItem (cellAverageLatency);
+     // indicationMessageHelper->AddCuUpCellPmItem (cellAverageLatency);
     }
 
   // PDCP volume for the whole cell
   if (!indicationMessageHelper->IsOffline ())
     {
       // pDCPBytesUL = 0 since it is not supported from the simulator
-      indicationMessageHelper->FillCuUpValues (plmId, 0, cellDlTxVolume);
+     // indicationMessageHelper->FillCuUpValues (plmId, 0, cellDlTxVolume);
     }
 
   NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
@@ -1033,7 +1046,7 @@ LteEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
       if (!indicationMessageHelper->IsOffline ())
         {
           // DRB.RelActNbr.5QI.UEID not modeled in the simulator
-          indicationMessageHelper->AddCuCpUePmItem (ueImsiComplete, numDrb, 0);
+         // indicationMessageHelper->AddCuCpUePmItem (ueImsiComplete, numDrb, 0);
         }
 
       uePmString.insert (std::make_pair (imsi, std::to_string (numDrb) + "," + std::to_string (0)));
@@ -1041,7 +1054,7 @@ LteEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
 
   if (!indicationMessageHelper->IsOffline ())
     {
-      indicationMessageHelper->FillCuCpValues (ueMapSize);
+     // indicationMessageHelper->FillCuCpValues (ueMapSize);
     }
 
   if (m_forceE2FileLogging)
