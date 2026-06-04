@@ -400,9 +400,9 @@ main (int argc, char *argv[])
   Ptr<MmWavePointToPointEpcHelper> epcHelper = CreateObject<MmWavePointToPointEpcHelper> ();
   mmwaveHelper->SetEpcHelper (epcHelper);
 
-  uint8_t nMmWaveEnbNodes = 4;
+  uint8_t nMmWaveEnbNodes = 1;
   uint8_t nLteEnbNodes = 1;
-  uint32_t ues = 5;
+  uint32_t ues = 2;
   uint8_t nUeNodes = ues* nMmWaveEnbNodes;
   //uint8_t nUeNodes = 1;
   NS_LOG_INFO (" Bandwidth " << bandwidth << " centerFrequency " << double (centerFrequency)
@@ -479,8 +479,8 @@ main (int argc, char *argv[])
   uePositionAlloc->SetY (centerPosition.y);
   uePositionAlloc->SetRho (isd);
   Ptr<UniformRandomVariable> speed = CreateObject<UniformRandomVariable> ();
-  speed->SetAttribute ("Min", DoubleValue (2.0));
-  speed->SetAttribute ("Max", DoubleValue (4.0));
+  speed->SetAttribute ("Min", DoubleValue (0.0001));
+  speed->SetAttribute ("Max", DoubleValue (0.0002));
 
   uemobility.SetMobilityModel ("ns3::RandomWalk2dOutdoorMobilityModel", "Speed",
                                PointerValue (speed), "Bounds",

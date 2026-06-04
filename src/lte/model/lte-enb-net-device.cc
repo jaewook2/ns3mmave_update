@@ -733,7 +733,7 @@ LteEnbNetDevice::SetE2Termination (Ptr<E2Termination> e2term)
   if (!m_forceE2FileLogging || m_e2andlog)
     {
       long m_e2_func_id = long (e2_func_id);
-      long m_rc_e2_func_id = long (rc_e2_func_id); 
+      //long m_rc_e2_func_id = long (rc_e2_func_id); 
       // update
 
       int nb_type = 0;
@@ -745,11 +745,11 @@ LteEnbNetDevice::SetE2Termination (Ptr<E2Termination> e2term)
           std::bind (&LteEnbNetDevice::KpmSubscriptionCallback, this, std::placeholders::_1));
       
       Ptr<RicControlFunctionDescription> ricCtrlFd = Create<RicControlFunctionDescription> ();
-
+      /*
       e2term->RegisterSmCallbackToE2Sm (m_rc_e2_func_id, ricCtrlFd,
                                        std::bind (&LteEnbNetDevice::ControlMessageReceivedCallback,
                                                    this, std::placeholders::_1));
-      
+      */
       // Mostafa-FD-TODO
       // Ptr<RicDeletelFunctionDescription> ricDeletelFd = Create<RicDeletelFunctionDescription> ();
       // e2term->RegisterSmCallbackToE2Sm (4, static_cast<Ptr<FunctionDescription>>(ricDeletelFd),

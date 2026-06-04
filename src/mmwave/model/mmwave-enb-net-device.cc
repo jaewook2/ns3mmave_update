@@ -973,12 +973,6 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
                                std::to_string (m_cellId) + "," + std::to_string (imsi) + "," +
                                std::to_string (sinrThisCell) + "," + std::to_string (convertedSinr);
 
-      // ueVal->AddItem<long> ("enbdev", m_cellId);
-      // ueVal->AddItem<long> ("UE", imsi);
-      // ueVal->AddItem<long> ("L3-serving-SINR", sinrThisCell);
-      // ueVal->AddItem<long> ("L3-serving-SINR-3gpp", convertedSinr);
-
-
 
       // For the neighbors
       // TODO create double map, imsi -> cell -> sinr
@@ -1328,6 +1322,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
       // UE-specific Downlink IP combined EN-DC throughput from LTE eNB. Unit is kbps. Rlc based computation
       double drbThrDlUeid =
           m_drbThrDlUeid.find (imsi) != m_drbThrDlUeid.end () ? m_drbThrDlUeid.at (imsi) : 0;
+
       /*
       indicationMessageHelper->AddDuUePmItem (
           ueImsiComplete, macPduUe, macPduInitialUe, macQpsk, mac16Qam, mac64Qam, macRetx,
@@ -1385,40 +1380,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
   long dlPrbUsage = std::min ((long) (prbUtilizationDl / dlAvailablePrbs * 100),
                               (long) 100); // percentage of used PRBs
   long ulPrbUsage = 0; // TODO for future implementation
-    /*
-  if (!indicationMessageHelper->IsOffline ())
-    {
-      indicationMessageHelper->AddDuCellPmItem (
-          macPduCellSpecific, macPduInitialCellSpecific, macQpskCellSpecific, mac16QamCellSpecific,
-          mac64QamCellSpecific, prbUtilizationDl, macRetxCellSpecific, macVolumeCellSpecific,
-          macMac04CellSpecific, macMac59CellSpecific, macMac1014CellSpecific,
-          macMac1519CellSpecific, macMac2024CellSpecific, macMac2529CellSpecific,
-          macSinrBin1CellSpecific, macSinrBin2CellSpecific, macSinrBin3CellSpecific,
-          macSinrBin4CellSpecific, macSinrBin5CellSpecific, macSinrBin6CellSpecific,
-          macSinrBin7CellSpecific, rlcBufferOccupCellSpecific, ueMap.size ());
 
-      Ptr<CellResourceReport> cellResRep = Create<CellResourceReport> ();
-      cellResRep->m_plmId = plmId;
-      cellResRep->m_nrCellId = nrCellId;
-      cellResRep->dlAvailablePrbs = dlAvailablePrbs;
-      cellResRep->ulAvailablePrbs = ulAvailablePrbs;
-
-      Ptr<ServedPlmnPerCell> servedPlmnPerCell = Create<ServedPlmnPerCell> ();
-      servedPlmnPerCell->m_plmId = plmId;
-      servedPlmnPerCell->m_nrCellId = nrCellId;
-
-      Ptr<EpcDuPmContainer> epcDuVal = Create<EpcDuPmContainer> ();
-      epcDuVal->m_qci = qci;
-      epcDuVal->m_dlPrbUsage = dlPrbUsage;
-      epcDuVal->m_ulPrbUsage = ulPrbUsage;
-
-      servedPlmnPerCell->m_perQciReportItems.insert (epcDuVal);
-      cellResRep->m_servedPlmnPerCellItems.insert (servedPlmnPerCell);
-
-      indicationMessageHelper->AddDuCellResRepPmItem (cellResRep);
-      indicationMessageHelper->FillDuValues (plmId + std::to_string (nrCellId));
-    }
-*/
   if (false && m_forceE2FileLogging)
     {
       std::ofstream csv{};
@@ -1534,15 +1496,6 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
               std::to_string (macSinrBin7CellSpecific) + "," +
               std::to_string (rlcBufferOccupCellSpecific) + "," + std::to_string (ueMap.size ());
 
-          /*
-                                                          UESpecificValues:
-
-                                                              TB.TotNbrDl.1.UEID, TB.TotNbrDlInitial.UEID, TB.TotNbrDlInitial.Qpsk.UEID, TB.TotNbrDlInitial.16Qam.UEID,TB.TotNbrDlInitial.64Qam.UEID, TB.ErrTotalNbrDl.1.UEID, QosFlow.PdcpPduVolumeDL_Filter.UEID,
-                                                              RRU.PrbUsedDl.UEID, CARR.PDSCHMCSDist.Bin1.UEID, CARR.PDSCHMCSDist.Bin2.UEID, CARR.PDSCHMCSDist.Bin3.UEID, CARR.PDSCHMCSDist.Bin5.UEID, CARR.PDSCHMCSDist.Bin6.UEID,
-                                                              L1M.RS-SINR.Bin34.UEID, L1M.RS-SINR.Bin46.UEID, L1M.RS-SINR.Bin58.UEID, L1M.RS-SINR.Bin70.UEID, L1M.RS-SINR.Bin82.UEID, L1M.RS-SINR.Bin94.UEID, L1M.RS-SINR.Bin127.UEID,
-                                                              DRB.BufferSize.Qos.UEID, DRB.UEThpDl.UEID, DRB.UEThpDlPdcpBased.UEID
-                                                        */
-
           for (auto ue : ueMap)
             {
               uint64_t imsi = ue.second->GetImsi ();
@@ -1616,7 +1569,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
   uint32_t macPrbsCellSpecific = 0;
 
 
-
+double sinr_linear ;
  // std::unordered_map<uint64_t, std::string> uePmString{};
 
   for (auto ue : ueMap)
@@ -1626,7 +1579,10 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
 
       Ptr<MeasurementItemList> ueVal = Create<MeasurementItemList> (ueImsiComplete);
       long numDrb = ue.second->GetDrbMap ().size ();
-      double sinrThisCell = 10 * std::log10 (m_l3sinrMap[imsi][m_cellId]);
+      sinr_linear = 10 * std::log10 (m_l3sinrMap[imsi][m_cellId]);
+      sinr_linear = std::max(sinr_linear, 1e-12);
+      double sinrThisCell = sinr_linear;
+
       //double convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinrThisCell);
       double convertedSinr = 0;
       /// update 1125
@@ -1660,7 +1616,6 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
       double convertedSinrNeigCell8 =0 ;
       uint16_t IDNeigCell8 = 0;
 
-      double sinr_update;
 
       std::multimap<long double, uint16_t> sortFlipMap_update = flip_map (m_l3sinrMap[imsi]);
 
@@ -1671,13 +1626,19 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
         }
 
       int itIndex_update = 0;
+      double sinr_linear;
+      double sinr_update;
+
       for (std::map<long double, uint16_t>::iterator it = --sortFlipMap_update.end ();
            it != --sortFlipMap_update.begin () && itIndex_update < nNeighbours_update; it--)
         {
           uint16_t cellId = it->second;
           if (cellId != m_cellId)
             {
-              sinr_update = 10 * std::log10 (it->first); // now SINR is a key due to the sort of the map
+              sinr_linear = it->first;
+              sinr_linear = 10 * std::log10(sinr_linear);
+              sinr_update = std::max(sinr_linear, 1e-4);
+              //sinr_update = 10 * std::log10 (it->first); // now SINR is a key due to the sort of the map
               //convertedSinr = L3RrcMeasurements::ThreeGppMapSinr (sinr_update);
 
               if (itIndex_update == 0) {
@@ -1877,6 +1838,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageNB (std::string plmId)
       // UE-specific Downlink IP combined EN-DC throughput from LTE eNB. Unit is kbps. Rlc based computation
       double drbThrDlUeid =
           m_drbThrDlUeid.find (imsi) != m_drbThrDlUeid.end () ? m_drbThrDlUeid.at (imsi) : 0;
+      if (drbThrDlUeid < 0) {drbThrDlUeid = 0;} // added for
 
       m_e2DuCalculator->ResetPhyTracesForRntiCellId (rnti, m_cellId);
 
